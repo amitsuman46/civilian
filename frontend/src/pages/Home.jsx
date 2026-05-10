@@ -229,8 +229,8 @@ export default function Home() {
           </div>
         ) : (
           <MapContainer
-            center={[33.73, 73.09]}
-            zoom={11}
+            center={[20.5937, 78.9629]}
+            zoom={5}
             style={{ height: '380px', width: '100%', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)' }}
             scrollWheelZoom={false}
           >

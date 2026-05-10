@@ -18,8 +18,8 @@ const TILES = {
   },
 };
 
-const DEFAULT_CENTER = [33.73, 73.09];
-const DEFAULT_ZOOM  = 12;
+const DEFAULT_CENTER = [20.5937, 78.9629];
+const DEFAULT_ZOOM  = 5;
 
 function ClickHandler({ onMapClick }) {
   useMapEvents({ click: (e) => onMapClick(e.latlng) });
