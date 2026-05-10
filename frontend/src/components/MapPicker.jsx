@@ -103,8 +103,7 @@ export default function MapPicker({ lat, lng, polygon, onChange }) {
     );
   };
 
-  const handleSearch = async (e) => {
-    e.preventDefault();
+  const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setSearchError('');
     try {
@@ -150,19 +149,20 @@ export default function MapPicker({ lat, lng, polygon, onChange }) {
         </div>
 
         {/* Location search */}
-        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '0.4rem', flex: 1, minWidth: '200px' }}>
+        <div style={{ display: 'flex', gap: '0.4rem', flex: 1, minWidth: '200px' }}>
           <input
             type="text"
             className="form-input"
             placeholder="Search location…"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && (e.stopPropagation(), handleSearch())}
             style={{ flex: 1 }}
           />
-          <button type="submit" className="btn-primary" style={{ padding: '0 0.75rem', flexShrink: 0 }}>
+          <button type="button" className="btn-primary" onClick={handleSearch} style={{ padding: '0 0.75rem', flexShrink: 0 }}>
             <i className="fas fa-search"></i>
           </button>
-        </form>
+        </div>
 
         {/* GPS button */}
         <button type="button" className="btn-secondary" onClick={handleGPS} disabled={gpsLoading} style={{ flexShrink: 0 }}>
