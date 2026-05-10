@@ -1,6 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap } from 'react-leaflet';
 import API from '../api';
+
+function AutoFit({ pin, polygon }) {
+  const map = useMap();
+  useEffect(() => {
+    if (pin && polygon) {
+      const bounds = [];
+      bounds.push(pin);
+      const coords = polygon.geometry?.coordinates?.[0] || polygon.features?.[0]?.geometry?.coordinates?.[0] || [];
+      coords.forEach(([lng, lat]) => bounds.push([lat, lng]));
+      if (bounds.length > 1) { map.fitBounds(bounds, { padding: [40, 40] }); return; }
+    }
+    if (pin) { map.setView(pin, 15); return; }
+    if (polygon) {
+      const coords = polygon.geometry?.coordinates?.[0] || polygon.features?.[0]?.geometry?.coordinates?.[0] || [];
+      if (coords.length) {
+        const bounds = coords.map(([lng, lat]) => [lat, lng]);
+        map.fitBounds(bounds, { padding: [40, 40] });
+      }
+    }
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
 
 function fmt(str) {
   if (!str) return '—';
@@ -34,7 +57,17 @@ export default function FullReport() {
   const docExt   = rec.document_path ? rec.document_path.split('.').pop().toLowerCase() : '';
 
   let familyMembers = [];
-  try { familyMembers = JSON.parse(rec.family_details || '[]'); } catch {}
+  try {
+    const raw = rec.family_details;
+    familyMembers = Array.isArray(raw) ? raw : JSON.parse(raw || '[]');
+  } catch {}
+
+  const pin     = rec.lat && rec.lng ? [parseFloat(rec.lat), parseFloat(rec.lng)] : null;
+  const polygon = rec.polygon
+    ? (typeof rec.polygon === 'string' ? JSON.parse(rec.polygon) : rec.polygon)
+    : null;
+  const hasMap  = pin || polygon;
+  const mapLabel = pin && polygon ? 'Pin + Plot boundary' : pin ? 'Pin location' : polygon ? 'Plot boundary' : null;
 
   const income      = parseFloat(rec.income || 0);
   const expenditure = parseFloat(rec.expenditure || 0);
@@ -151,6 +184,50 @@ export default function FullReport() {
             </div>
           </div>
 
+          {/* Map Location */}
+          {hasMap && (
+            <div className="card mb-2">
+              <div className="card-header">
+                <h3><i className="fas fa-map-location-dot"></i> Mapped Location</h3>
+                <span className="badge badge-primary" style={{ fontSize: '.75rem' }}>{mapLabel}</span>
+              </div>
+              <div className="card-body" style={{ padding: 0, overflow: 'hidden', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)' }}>
+                <MapContainer
+                  center={pin || [20.5937, 78.9629]}
+                  zoom={pin ? 15 : 5}
+                  style={{ height: '340px', width: '100%' }}
+                  scrollWheelZoom={false}
+                  zoomControl={true}
+                  dragging={true}
+                >
+                  <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
+                  />
+                  <AutoFit pin={pin} polygon={polygon} />
+                  {pin && (
+                    <Marker position={pin}>
+                      <Popup>
+                        <div style={{ lineHeight: 1.7 }}>
+                          <strong>{rec.name}</strong><br />
+                          {rec.house_no && <span style={{ fontSize: '.8rem' }}>H/No {rec.house_no}</span>}<br />
+                          <span style={{ fontSize: '.75rem', color: '#888' }}>{pin[0].toFixed(6)}, {pin[1].toFixed(6)}</span>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  )}
+                  {polygon && (
+                    <GeoJSON
+                      key={JSON.stringify(polygon)}
+                      data={polygon}
+                      style={{ color: '#1d4ed8', weight: 2, fillOpacity: 0.15 }}
+                    />
+                  )}
+                </MapContainer>
+              </div>
+            </div>
+          )}
+
           {/* Property & Income */}
           <div className="card mb-2">
             <div className="card-header"><h3><i className="fas fa-building"></i> Property &amp; Income</h3></div>
@@ -237,6 +314,7 @@ export default function FullReport() {
           .report-layout { grid-template-columns: 200px 1fr; }
           body { background: #fff; }
           .main-content { padding: 0; }
+          .leaflet-control-zoom { display: none !important; }
         }
       `}</style>
     </>

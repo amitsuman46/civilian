@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import {
   Chart as ChartJS,
   CategoryScale, LinearScale,
@@ -25,7 +26,8 @@ const tooltipDefaults = {
 
 export default function Home() {
   const { user }   = useAuth();
-  const [stats, setStats] = useState(null);
+  const [stats, setStats]     = useState(null);
+  const [mapPins, setMapPins] = useState([]);
 
   const hour     = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -33,6 +35,7 @@ export default function Home() {
 
   useEffect(() => {
     API.get('/api/stats').then(data => { if (data.success) setStats(data); });
+    API.get('/api/civilians/map-pins').then(data => { if (data.success) setMapPins(data.pins); });
   }, []);
 
   const total = stats?.kpi?.total ?? 0;
@@ -209,6 +212,47 @@ export default function Home() {
           </div>
           {stats && <Bar data={areaChartData} options={areaOpts} style={{ maxHeight: '360px' }} />}
         </div>
+      </div>
+
+      {/* Civilian Locations Map */}
+      <div className="dash-chart-card" style={{ marginBottom: '1rem' }}>
+        <div className="dash-chart-header">
+          <div className="dash-chart-title"><i className="fas fa-map-location-dot"></i> Civilian Locations</div>
+          <span className="dash-chart-badge">
+            {mapPins.length} pinned record{mapPins.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+        {mapPins.length === 0 ? (
+          <div style={{ height: '380px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '.875rem', flexDirection: 'column', gap: '.5rem' }}>
+            <i className="fas fa-map-pin" style={{ fontSize: '2rem', opacity: .3 }}></i>
+            <span>No pinned records yet. Use the map picker when adding a record.</span>
+          </div>
+        ) : (
+          <MapContainer
+            center={[20.5937, 78.9629]}
+            zoom={5}
+            style={{ height: '380px', width: '100%', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)' }}
+            scrollWheelZoom={false}
+          >
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
+            />
+            {mapPins.map(pin => (
+              <Marker key={pin.id} position={[pin.lat, pin.lng]}>
+                <Popup>
+                  <div style={{ lineHeight: 1.7, minWidth: '130px' }}>
+                    <strong>{pin.name}</strong><br />
+                    {pin.house_no && <span style={{ fontSize: '.8rem', color: '#555' }}>H/No {pin.house_no}</span>}<br />
+                    <Link to={`/dashboard/report/${pin.id}`} style={{ fontSize: '.8rem', color: '#1d4ed8' }}>
+                      View Report →
+                    </Link>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
+        )}
       </div>
     </>
   );

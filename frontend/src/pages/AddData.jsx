@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FamilyTable    from '../components/FamilyTable';
 import WebcamCapture  from '../components/WebcamCapture';
+import MapPicker      from '../components/MapPicker';
 import { useToast }   from '../context/ToastContext';
 import API from '../api';
 
@@ -33,6 +34,7 @@ export default function AddData() {
   const [photoFileName, setPhotoFileName] = useState('No file chosen');
   const [docFileName, setDocFileName]     = useState('No file chosen');
   const [filePreviewSrc, setFilePreviewSrc] = useState(null);
+  const [mapData, setMapData]   = useState({ lat: null, lng: null, polygon: null });
   const [errors, setErrors]     = useState({});
   const [busy, setBusy]         = useState(false);
 
@@ -48,7 +50,11 @@ export default function AddData() {
     if (!form.mobile.trim())   e.mobile   = 'Contact number is required.';
     else if (!/^[6-9]\d{9}$/.test(form.mobile.trim())) e.mobile = 'Enter a valid 10-digit Indian mobile number.';
     setErrors(e);
-    return Object.keys(e).length === 0;
+    if (Object.keys(e).length > 0) {
+      showToast(Object.values(e)[0], 'error');
+      return false;
+    }
+    return true;
   };
 
   const handlePhotoFileChange = (e) => {
@@ -86,6 +92,9 @@ export default function AddData() {
     const fd = new FormData();
     Object.entries(form).forEach(([k, v]) => fd.append(k, v));
     fd.append('family_details', JSON.stringify(family.filter(m => m.name.trim())));
+    if (mapData.lat !== null) fd.append('lat', mapData.lat);
+    if (mapData.lng !== null) fd.append('lng', mapData.lng);
+    if (mapData.polygon)      fd.append('polygon', JSON.stringify(mapData.polygon));
 
     // Photo priority: webcam base64 > file upload
     if (photoB64) fd.append('photo_base64', photoB64);
@@ -113,6 +122,7 @@ export default function AddData() {
   const resetForm = () => {
     setForm(EMPTY);
     setFamily([]);
+    setMapData({ lat: null, lng: null, polygon: null });
     setPhotoFile(null); setDocFile(null);
     setPhotoB64(null); setDocB64(null);
     setPhotoFileName('No file chosen');
@@ -186,6 +196,19 @@ export default function AddData() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+
+        {/* SECTION 2b — Map Location */}
+        <div className="form-card">
+          <div className="form-card-header">
+            <i className="fas fa-map"></i> Pin Location on Map
+            <span style={{ fontSize: '.8rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+              Optional — drop a pin or draw a plot boundary
+            </span>
+          </div>
+          <div className="form-card-body">
+            <MapPicker lat={null} lng={null} polygon={null} onChange={setMapData} />
           </div>
         </div>
 

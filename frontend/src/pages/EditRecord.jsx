@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import FamilyTable   from '../components/FamilyTable';
 import WebcamCapture from '../components/WebcamCapture';
+import MapPicker     from '../components/MapPicker';
 import { useToast }  from '../context/ToastContext';
 import API from '../api';
 
@@ -28,6 +29,7 @@ export default function EditRecord() {
   const [docTab, setDocTab]       = useState('file');
   const [photoName, setPhotoName] = useState('No file chosen');
   const [docName, setDocName]     = useState('No file chosen');
+  const [mapData, setMapData]   = useState({ lat: null, lng: null, polygon: null });
   const [errors, setErrors] = useState({});
   const [busy, setBusy]     = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -47,7 +49,15 @@ export default function EditRecord() {
         immovable_property: r.immovable_property || '', movable_property: r.movable_property || '',
         income: r.income || '', expenditure: r.expenditure || '', salary: r.salary || '',
       });
-      try { setFamily(JSON.parse(r.family_details || '[]')); } catch { setFamily([]); }
+      try {
+        const raw = r.family_details;
+        setFamily(Array.isArray(raw) ? raw : JSON.parse(raw || '[]'));
+      } catch { setFamily([]); }
+      setMapData({
+        lat:     r.lat     ? parseFloat(r.lat)  : null,
+        lng:     r.lng     ? parseFloat(r.lng)  : null,
+        polygon: r.polygon ? (typeof r.polygon === 'string' ? JSON.parse(r.polygon) : r.polygon) : null,
+      });
     });
   }, [id]);
 
@@ -59,7 +69,11 @@ export default function EditRecord() {
     if (!form.mobile?.trim()) e.mobile = 'Contact number is required.';
     else if (!/^[6-9]\d{9}$/.test(form.mobile.trim())) e.mobile = 'Enter a valid 10-digit Indian mobile number.';
     setErrors(e);
-    return Object.keys(e).length === 0;
+    if (Object.keys(e).length > 0) {
+      showToast(Object.values(e)[0], 'error');
+      return false;
+    }
+    return true;
   };
 
   const handleSubmit = async (e) => {
@@ -71,6 +85,9 @@ export default function EditRecord() {
     fd.append('id', id);
     Object.entries(form).forEach(([k, v]) => fd.append(k, v));
     fd.append('family_details', JSON.stringify(family.filter(m => m.name.trim())));
+    if (mapData.lat !== null) fd.append('lat', mapData.lat);
+    if (mapData.lng !== null) fd.append('lng', mapData.lng);
+    if (mapData.polygon)      fd.append('polygon', JSON.stringify(mapData.polygon));
 
     if (photoB64) fd.append('photo_base64', photoB64);
     else if (photoFile) fd.append('photo_file', photoFile);
@@ -167,6 +184,26 @@ export default function EditRecord() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+
+        {/* Map Location */}
+        <div className="form-card">
+          <div className="form-card-header">
+            <i className="fas fa-map"></i> Pin Location on Map
+            {mapData.lat && (
+              <span className="badge badge-primary" style={{ marginLeft: 'auto', fontSize: '.75rem' }}>
+                Pinned: {mapData.lat.toFixed(5)}, {mapData.lng.toFixed(5)}
+              </span>
+            )}
+          </div>
+          <div className="form-card-body">
+            <MapPicker
+              lat={mapData.lat}
+              lng={mapData.lng}
+              polygon={mapData.polygon}
+              onChange={setMapData}
+            />
           </div>
         </div>
 
