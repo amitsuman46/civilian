@@ -26,8 +26,9 @@ const tooltipDefaults = {
 
 export default function Home() {
   const { user }   = useAuth();
-  const [stats, setStats]     = useState(null);
-  const [mapPins, setMapPins] = useState([]);
+  const [stats, setStats]       = useState(null);
+  const [mapPins, setMapPins]   = useState([]);
+  const [mapFilter, setMapFilter] = useState('All');
 
   const hour     = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -215,45 +216,63 @@ export default function Home() {
       </div>
 
       {/* Civilian Locations Map */}
-      <div className="dash-chart-card" style={{ marginBottom: '1rem' }}>
-        <div className="dash-chart-header">
-          <div className="dash-chart-title"><i className="fas fa-map-location-dot"></i> Civilian Locations</div>
-          <span className="dash-chart-badge">
-            {mapPins.length} pinned record{mapPins.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-        {mapPins.length === 0 ? (
-          <div style={{ height: '380px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '.875rem', flexDirection: 'column', gap: '.5rem' }}>
-            <i className="fas fa-map-pin" style={{ fontSize: '2rem', opacity: .3 }}></i>
-            <span>No pinned records yet. Use the map picker when adding a record.</span>
+      {(() => {
+        const AREAS = ['All', 'A Coy', 'B Coy', 'C Coy', 'D Coy', 'E Coy', 'F Coy', 'HQ Coy'];
+        const filtered = mapFilter === 'All' ? mapPins : mapPins.filter(p => p.area === mapFilter);
+        return (
+          <div className="dash-chart-card" style={{ marginBottom: '1rem' }}>
+            <div className="dash-chart-header">
+              <div className="dash-chart-title"><i className="fas fa-map-location-dot"></i> Civilian Locations</div>
+              <span className="dash-chart-badge">{filtered.length} of {mapPins.length} pinned</span>
+              <select
+                value={mapFilter}
+                onChange={e => setMapFilter(e.target.value)}
+                style={{ marginLeft: 'auto', padding: '0.25rem 0.5rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', fontSize: '.8rem', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer' }}
+              >
+                {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+
+            {mapPins.length === 0 ? (
+              <div style={{ height: '380px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '.875rem', flexDirection: 'column', gap: '.5rem' }}>
+                <i className="fas fa-map-pin" style={{ fontSize: '2rem', opacity: .3 }}></i>
+                <span>No pinned records yet. Use the map picker when adding a record.</span>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div style={{ height: '380px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '.875rem', flexDirection: 'column', gap: '.5rem' }}>
+                <i className="fas fa-map-pin" style={{ fontSize: '2rem', opacity: .3 }}></i>
+                <span>No pinned records for <strong>{mapFilter}</strong>.</span>
+              </div>
+            ) : (
+              <MapContainer
+                center={[20.5937, 78.9629]}
+                zoom={5}
+                style={{ height: '380px', width: '100%', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)' }}
+                scrollWheelZoom={false}
+              >
+                <TileLayer
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
+                />
+                {filtered.map(pin => (
+                  <Marker key={pin.id} position={[pin.lat, pin.lng]}>
+                    <Popup>
+                      <div style={{ lineHeight: 1.7, minWidth: '130px' }}>
+                        <strong>{pin.name}</strong><br />
+                        {pin.house_no && <span style={{ fontSize: '.8rem', color: '#555' }}>H/No {pin.house_no}</span>}<br />
+                        {pin.area && <span style={{ fontSize: '.8rem', color: '#888' }}>{pin.area}</span>}<br />
+                        <Link to={`/dashboard/report/${pin.id}`} style={{ fontSize: '.8rem', color: '#1d4ed8' }}>
+                          View Report →
+                        </Link>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+              </MapContainer>
+            )}
           </div>
-        ) : (
-          <MapContainer
-            center={[20.5937, 78.9629]}
-            zoom={5}
-            style={{ height: '380px', width: '100%', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)' }}
-            scrollWheelZoom={false}
-          >
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
-            />
-            {mapPins.map(pin => (
-              <Marker key={pin.id} position={[pin.lat, pin.lng]}>
-                <Popup>
-                  <div style={{ lineHeight: 1.7, minWidth: '130px' }}>
-                    <strong>{pin.name}</strong><br />
-                    {pin.house_no && <span style={{ fontSize: '.8rem', color: '#555' }}>H/No {pin.house_no}</span>}<br />
-                    <Link to={`/dashboard/report/${pin.id}`} style={{ fontSize: '.8rem', color: '#1d4ed8' }}>
-                      View Report →
-                    </Link>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-          </MapContainer>
-        )}
-      </div>
+        );
+      })()}
     </>
   );
 }

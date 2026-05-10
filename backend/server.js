@@ -219,7 +219,7 @@ app.get('/api/civilians', requireAuth, async (req, res) => {
 app.get('/api/civilians/map-pins', requireAuth, async (req, res) => {
   try {
     const [pins] = await pool.query(
-      'SELECT id, name, house_no, lat, lng FROM civilians WHERE lat IS NOT NULL AND lng IS NOT NULL'
+      'SELECT id, name, house_no, area, lat, lng FROM civilians WHERE lat IS NOT NULL AND lng IS NOT NULL'
     );
     res.json({ success: true, pins });
   } catch (e) {
