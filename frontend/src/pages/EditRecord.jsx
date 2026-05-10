@@ -49,7 +49,10 @@ export default function EditRecord() {
         immovable_property: r.immovable_property || '', movable_property: r.movable_property || '',
         income: r.income || '', expenditure: r.expenditure || '', salary: r.salary || '',
       });
-      try { setFamily(JSON.parse(r.family_details || '[]')); } catch { setFamily([]); }
+      try {
+        const raw = r.family_details;
+        setFamily(Array.isArray(raw) ? raw : JSON.parse(raw || '[]'));
+      } catch { setFamily([]); }
       setMapData({
         lat:     r.lat     ? parseFloat(r.lat)  : null,
         lng:     r.lng     ? parseFloat(r.lng)  : null,
