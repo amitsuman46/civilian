@@ -69,7 +69,11 @@ export default function EditRecord() {
     if (!form.mobile?.trim()) e.mobile = 'Contact number is required.';
     else if (!/^[6-9]\d{9}$/.test(form.mobile.trim())) e.mobile = 'Enter a valid 10-digit Indian mobile number.';
     setErrors(e);
-    return Object.keys(e).length === 0;
+    if (Object.keys(e).length > 0) {
+      showToast(Object.values(e)[0], 'error');
+      return false;
+    }
+    return true;
   };
 
   const handleSubmit = async (e) => {
