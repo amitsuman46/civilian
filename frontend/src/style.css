@@ -1741,3 +1741,6 @@ h1,h2,h3,h4,h5,h6 {
   .about-identity { flex-direction: column; align-items: flex-start; }
 }
 @media (max-width: 400px) { .about-stats { grid-template-columns: 1fr; } }
+
+/* Prevent Leaflet z-index from conflicting with the fixed navbar */
+.leaflet-container { z-index: 0; }

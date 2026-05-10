@@ -215,6 +215,18 @@ app.get('/api/civilians', requireAuth, async (req, res) => {
   }
 });
 
+// GET map pins (must be before /:id to avoid route conflict)
+app.get('/api/civilians/map-pins', requireAuth, async (req, res) => {
+  try {
+    const [pins] = await pool.query(
+      'SELECT id, name, house_no, lat, lng FROM civilians WHERE lat IS NOT NULL AND lng IS NOT NULL'
+    );
+    res.json({ success: true, pins });
+  } catch (e) {
+    console.error(e); res.json({ success: false, message: 'DB error' });
+  }
+});
+
 // GET single
 app.get('/api/civilians/:id', requireAuth, async (req, res) => {
   try {
@@ -253,19 +265,23 @@ app.post('/api/civilians', requireAuth,
       const salary      = isNaN(b.salary)      ? 0 : parseFloat(b.salary);
       const income      = isNaN(b.income)      ? 0 : parseFloat(b.income);
       const expenditure = isNaN(b.expenditure) ? 0 : parseFloat(b.expenditure);
+      const lat         = b.lat  ? parseFloat(b.lat)  : null;
+      const lng         = b.lng  ? parseFloat(b.lng)  : null;
+      const polygon     = b.polygon || null;
 
       const [result] = await pool.query(`
         INSERT INTO civilians
           (house_no,name,mobile,community,religion,occupation,
            immovable_property,movable_property,salary,income,expenditure,
-           health_status,area,village,family_details,photo_path,document_path)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+           health_status,area,village,lat,lng,polygon,family_details,photo_path,document_path)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
         house_no || null, name, mobile,
         b.community || null, b.religion || null, b.occupation || null,
         b.immovable_property || null, b.movable_property || null,
         salary, income, expenditure,
         b.health_status || null, b.area || null, b.village || null,
+        lat, lng, polygon,
         parseFamily(b.family_details), photo_path || null, document_path || null,
       ]);
 
@@ -315,12 +331,15 @@ app.put('/api/civilians/:id', requireAuth,
       const salary      = isNaN(b.salary)      ? 0 : parseFloat(b.salary);
       const income      = isNaN(b.income)      ? 0 : parseFloat(b.income);
       const expenditure = isNaN(b.expenditure) ? 0 : parseFloat(b.expenditure);
+      const lat         = b.lat  ? parseFloat(b.lat)  : null;
+      const lng         = b.lng  ? parseFloat(b.lng)  : null;
+      const polygon     = b.polygon || null;
 
       await pool.query(`
         UPDATE civilians SET
           house_no=?,name=?,mobile=?,community=?,religion=?,occupation=?,
           immovable_property=?,movable_property=?,salary=?,income=?,expenditure=?,
-          health_status=?,area=?,village=?,family_details=?,photo_path=?,document_path=?
+          health_status=?,area=?,village=?,lat=?,lng=?,polygon=?,family_details=?,photo_path=?,document_path=?
         WHERE id=?
       `, [
         b.house_no || null, name, mobile,
@@ -328,6 +347,7 @@ app.put('/api/civilians/:id', requireAuth,
         b.immovable_property || null, b.movable_property || null,
         salary, income, expenditure,
         b.health_status || null, b.area || null, b.village || null,
+        lat, lng, polygon,
         parseFamily(b.family_details), photo_path || null, document_path || null,
         id,
       ]);
