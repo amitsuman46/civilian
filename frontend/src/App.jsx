@@ -13,6 +13,7 @@ import EditRecord    from './pages/EditRecord';
 import FullReport    from './pages/FullReport';
 import BulkHouse     from './pages/BulkHouse';
 import About         from './pages/About';
+import News          from './pages/News';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -42,6 +43,7 @@ export default function App() {
                 <Route path="edit/:id"   element={<EditRecord />} />
                 <Route path="report/:id" element={<FullReport />} />
                 <Route path="houseno"    element={<BulkHouse />} />
+                <Route path="news"       element={<News />} />
                 <Route path="about"      element={<About />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />

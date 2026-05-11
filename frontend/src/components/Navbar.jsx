@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { key: 'add',     path: '/dashboard/add',     icon: 'fa-user-plus',     label: 'Add Data' },
   { key: 'update',  path: '/dashboard/update',  icon: 'fa-pen-to-square', label: 'Update / Delete' },
   { key: 'view',    path: '/dashboard/view',    icon: 'fa-table-list',    label: 'View Data' },
+  { key: 'news',    path: '/dashboard/news',    icon: 'fa-newspaper',     label: 'News' },
   { key: 'about',   path: '/dashboard/about',   icon: 'fa-circle-info',   label: 'About' },
 ];
 
