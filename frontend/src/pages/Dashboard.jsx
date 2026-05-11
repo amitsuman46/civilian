@@ -8,6 +8,7 @@ const PAGE_TITLES = {
   '/dashboard/update':  'Update / Delete',
   '/dashboard/houseno': 'Assign House No',
   '/dashboard/about':   'About',
+  '/dashboard/weather': 'Weather',
 };
 
 function getTitle(pathname) {
