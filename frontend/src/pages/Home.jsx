@@ -13,7 +13,7 @@ import API from '../api';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 
-const AREAS    = ['A Coy','B Coy','C Coy','D Coy','E Coy','F Coy','HQ Coy'];
+const AREAS    = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
 const VILLAGES = [
   'Gagariyan','Barmiya and Doba','Upper Gagariyan','Wazli','kainth',
   'Sawjiya(Maidan)','Sawjiya','Sawjian(Mir Muhallah)','Sawjian(Bandi Muhallah)',

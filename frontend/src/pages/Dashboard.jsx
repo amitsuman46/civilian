@@ -14,7 +14,9 @@ const PAGE_TITLES = {
 
 function getTitle(pathname) {
   if (pathname.startsWith('/dashboard/report/')) return 'Full Report';
-  if (pathname.startsWith('/dashboard/edit/'))   return 'Edit Record';
+  if (pathname.startsWith('/dashboard/edit/')) return 'Edit Record';
+  if (pathname === '/dashboard/directory/add') return 'Add Directory Entry';
+  if (pathname.startsWith('/dashboard/directory/edit/')) return 'Edit Directory Entry';
   return PAGE_TITLES[pathname] || 'Dashboard';
 }
 

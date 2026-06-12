@@ -8,7 +8,7 @@ import API from '../api';
 
 const HEALTH_OPTIONS = ['Excellent','Good','Fair','Poor','Critical'];
 const OCCUPATIONS    = ['Farmer','Teacher','Engineer','Doctor','Businessman','Driver','Tailor','Nurse','Homemaker','Labourer','Government Employee','Self-Employed','Student','Retired','Other'];
-const AREAS          = ['A Coy','B Coy','C Coy','D Coy','E Coy','F Coy','HQ Coy'];
+const AREAS          = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
 const VILLAGES       = ['Gagariyan','Barmiya and Doba','Upper Gagariyan','Wazli','kainth','Sawjiya(Maidan)','Sawjiya','Sawjian(Mir Muhallah)','Sawjian(Bandi Muhallah)','Sawjian(Ladhi Muhallah)','Sawjian(Purya Muhallah)','Sawjian(Tantary Muhallah)','Sawjian(Gantar)','Sawjian(Sundri)'];
 const COMMUNITIES    = ['Kashmiri','Hindu','Muslim','Sikh','Christian','Buddhist','Jain','Other'];
 const RELIGIONS      = ['Islam','Hinduism','Sikhism','Christianity','Buddhism','Jainism','Other'];

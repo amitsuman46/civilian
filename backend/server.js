@@ -86,7 +86,7 @@ function parseFamily(raw) {
   try { return JSON.stringify(JSON.parse(raw)); } catch { return '[]'; }
 }
 
-const DEFINED_AREAS = ['A Coy','B Coy','C Coy','D Coy','E Coy','F Coy','HQ Coy'];
+const DEFINED_AREAS = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
 const DEFINED_VILLAGES = [
   'Gagariyan','Barmiya and Doba','Upper Gagariyan','Wazli','kainth',
   'Sawjiya(Maidan)','Sawjiya','Sawjian(Mir Muhallah)','Sawjian(Bandi Muhallah)',
@@ -419,6 +419,126 @@ app.patch('/api/civilians/:id/house-no', requireAuth, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
+// CIVIL DIRECTORY (separate from civilians registry)
+// ══════════════════════════════════════════════════════════════
+
+async function initDirectoryTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS civil_directory (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      mobile VARCHAR(20) NOT NULL,
+      designation VARCHAR(255) DEFAULT NULL,
+      village VARCHAR(255) DEFAULT NULL,
+      area VARCHAR(255) DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_dir_name (name),
+      INDEX idx_dir_area (area),
+      INDEX idx_dir_village (village)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+}
+
+function validateDirectoryBody(body) {
+  const name        = (body.name || '').trim();
+  const mobile      = (body.mobile || '').trim();
+  const designation = (body.designation || '').trim() || null;
+  const village     = (body.village || '').trim() || null;
+  const area        = (body.area || '').trim() || null;
+
+  if (!name)   return { error: 'Name is required.' };
+  if (!mobile) return { error: 'Contact number is required.' };
+  if (!/^[6-9]\d{9}$/.test(mobile))
+    return { error: 'Enter a valid 10-digit Indian mobile number.' };
+  if (area && !DEFINED_AREAS.includes(area))
+    return { error: 'Invalid area selected.' };
+  if (village && !DEFINED_VILLAGES.includes(village))
+    return { error: 'Invalid village selected.' };
+
+  return { name, mobile, designation, village, area };
+}
+
+app.get('/api/directory', requireAuth, async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    let records;
+    if (!q) {
+      [records] = await pool.query('SELECT * FROM civil_directory ORDER BY name ASC');
+    } else {
+      const like = `%${q}%`;
+      [records] = await pool.query(`
+        SELECT * FROM civil_directory
+        WHERE name LIKE ? OR mobile LIKE ? OR designation LIKE ?
+           OR village LIKE ? OR area LIKE ?
+        ORDER BY name ASC
+      `, Array(5).fill(like));
+    }
+    res.json({ success: true, records });
+  } catch (e) {
+    console.error(e);
+    res.json({ success: false, message: 'Directory load error' });
+  }
+});
+
+app.get('/api/directory/:id', requireAuth, async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM civil_directory WHERE id = ? LIMIT 1', [req.params.id]);
+    if (!rows.length) return res.json({ success: false, message: 'Entry not found.' });
+    res.json({ success: true, record: rows[0] });
+  } catch (e) {
+    console.error(e);
+    res.json({ success: false, message: 'Directory load error' });
+  }
+});
+
+app.post('/api/directory', requireAuth, async (req, res) => {
+  try {
+    const v = validateDirectoryBody(req.body);
+    if (v.error) return res.json({ success: false, message: v.error });
+    const [result] = await pool.query(`
+      INSERT INTO civil_directory (name, mobile, designation, village, area)
+      VALUES (?, ?, ?, ?, ?)
+    `, [v.name, v.mobile, v.designation, v.village, v.area]);
+    res.json({ success: true, message: 'Directory entry added.', id: result.insertId });
+  } catch (e) {
+    console.error(e);
+    res.json({ success: false, message: 'Failed to add entry.' });
+  }
+});
+
+app.put('/api/directory/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const [existing] = await pool.query('SELECT id FROM civil_directory WHERE id = ? LIMIT 1', [id]);
+    if (!existing.length) return res.json({ success: false, message: 'Entry not found.' });
+    const v = validateDirectoryBody(req.body);
+    if (v.error) return res.json({ success: false, message: v.error });
+    await pool.query(`
+      UPDATE civil_directory SET name=?, mobile=?, designation=?, village=?, area=?
+      WHERE id=?
+    `, [v.name, v.mobile, v.designation, v.village, v.area, id]);
+    res.json({ success: true, message: 'Directory entry updated.' });
+  } catch (e) {
+    console.error(e);
+    res.json({ success: false, message: 'Failed to update entry.' });
+  }
+});
+
+app.delete('/api/directory/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const [rows] = await pool.query('SELECT id FROM civil_directory WHERE id = ? LIMIT 1', [id]);
+    if (!rows.length) return res.json({ success: false, message: 'Entry not found.' });
+    await pool.query('DELETE FROM civil_directory WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Directory entry deleted.' });
+  } catch (e) {
+    console.error(e);
+    res.json({ success: false, message: 'Failed to delete entry.' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
 // SEARCH
 // ══════════════════════════════════════════════════════════════
 
@@ -594,4 +714,11 @@ app.get('/api/news/feeds', requireAuth, (req, res) => {
 });
 
 // ── Start server ───────────────────────────────────────────────
-app.listen(PORT, () => console.log(`Civilian backend running on http://localhost:${PORT}`));
+initDirectoryTable()
+  .then(() => {
+    app.listen(PORT, () => console.log(`Civilian backend running on http://localhost:${PORT}`));
+  })
+  .catch(err => {
+    console.error('Failed to init civil_directory table:', err);
+    process.exit(1);
+  });
