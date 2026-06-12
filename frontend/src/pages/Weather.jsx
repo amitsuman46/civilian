@@ -50,13 +50,28 @@ function wmoLabel(code) {
   return labels[Number(code)] || 'Weather';
 }
 
+function weatherTheme(code, isDay = 1) {
+  const c = Number(code);
+  if (c === 0) return isDay ? 'wx-theme--clear' : 'wx-theme--night';
+  if (c <= 3) return 'wx-theme--partly';
+  if (c <= 48) return 'wx-theme--fog';
+  if (c <= 67) return 'wx-theme--rain';
+  if (c <= 77) return 'wx-theme--snow';
+  if (c <= 99) return 'wx-theme--storm';
+  return 'wx-theme--default';
+}
+
+function windCompass(deg) {
+  if (typeof deg !== 'number') return '—';
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
 /**
  * @param {number} lat
  * @param {number} lng
  */
 async function reverseLabel(lat, lng) {
-  // Open-Meteo geocoding currently doesn't support reverse lookups (it returns 404),
-  // so we use OpenStreetMap/Nominatim (no API key required).
   const u = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=12&addressdetails=1`;
   const res = await fetch(u, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error('Reverse geocode failed');
@@ -65,12 +80,7 @@ async function reverseLabel(lat, lng) {
   const a = data.address || {};
 
   const city =
-    a.city ||
-    a.town ||
-    a.village ||
-    a.hamlet ||
-    a.municipality ||
-    '';
+    a.city || a.town || a.village || a.hamlet || a.municipality || '';
   const state = a.state || '';
   const country = a.country || '';
   const suburb = a.suburb || a.neighbourhood || a.county || '';
@@ -163,6 +173,10 @@ function formatDay(iso) {
   });
 }
 
+function formatDayShort(iso) {
+  return new Date(iso + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' });
+}
+
 const GPS_ID = '__gps__';
 
 export default function Weather() {
@@ -212,9 +226,7 @@ export default function Weather() {
 
   useEffect(() => {
     if (activeCity) loadWeather(activeCity);
-    else {
-      setBundle(null);
-    }
+    else setBundle(null);
   }, [activeCity, loadWeather]);
 
   const requestGpsCity = useCallback(() => {
@@ -253,8 +265,6 @@ export default function Weather() {
     if (cities.length === 0) requestGpsCity();
   }, [cities.length, requestGpsCity]);
 
-  const refreshGps = () => requestGpsCity();
-
   const addFromSearch = r => {
     const label = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
     const id = `place-${r.id ?? `${r.latitude},${r.longitude}`}`;
@@ -289,137 +299,107 @@ export default function Weather() {
   };
 
   const cur = bundle?.current;
+  const themeClass = cur ? weatherTheme(cur.weather_code, cur.is_day) : 'wx-theme--default';
+
+  const dailyRange = useMemo(() => {
+    if (!bundle?.daily7?.length) return { min: 0, max: 30 };
+    const mins = bundle.daily7.map(d => d.min).filter(v => v != null);
+    const maxs = bundle.daily7.map(d => d.max).filter(v => v != null);
+    return {
+      min: Math.min(...mins, 0),
+      max: Math.max(...maxs, 30),
+    };
+  }, [bundle]);
 
   return (
-    <>
-      <div className="page-header">
-        <div>
-          <div className="page-title"><i className="fas fa-cloud-sun"></i> Weather</div>
-          <div className="page-subtitle">
-            GPS and saved cities · 24-hour and 7-day forecast (Open-Meteo)
-            {activeCity?.label ? ` — Showing: ${activeCity.label}` : ''}
-          </div>
+    <div className="wx-wrap">
+      {/* Hero */}
+      <div className="wx-hero">
+        <div className="wx-hero-content">
+          <div className="wx-hero-badge"><i className="fas fa-satellite"></i> Live Forecast</div>
+          <h1 className="wx-hero-title">Weather</h1>
+          <p className="wx-hero-desc">
+            Real-time conditions, 24-hour outlook, and 7-day forecast for your locations.
+          </p>
         </div>
-        <div className="page-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={requestGpsCity}>
+        <div className="wx-hero-actions">
+          <button type="button" className="wx-hero-btn wx-hero-btn--solid" onClick={requestGpsCity}>
             <i className="fas fa-location-crosshairs"></i> Use GPS
           </button>
           {cities.some(c => c.id === GPS_ID) && (
-            <button type="button" className="btn btn-secondary btn-sm" onClick={refreshGps} title="Update GPS position">
-              <i className="fas fa-rotate"></i> Update location
+            <button type="button" className="wx-hero-btn" onClick={requestGpsCity}>
+              <i className="fas fa-rotate"></i> Refresh GPS
             </button>
           )}
         </div>
       </div>
 
       {geoStatus && (
-        <div className="alert alert-warning" style={{ marginBottom: '1rem' }}>
-          <i className="fas fa-circle-info"></i> {geoStatus}
+        <div className="wx-alert">
+          <i className="fas fa-circle-info"></i>
+          <span>{geoStatus}</span>
         </div>
       )}
 
-      {/* City tabs */}
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '0.5rem',
-          alignItems: 'center',
-          marginBottom: '1.25rem',
-          paddingBottom: '1rem',
-          borderBottom: '1px solid var(--border, rgba(0,0,0,.08))',
-        }}
-      >
-        {cities.map(c => (
-          <div
-            key={c.id}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              padding: '0.35rem 0.65rem',
-              borderRadius: 'var(--radius-lg, 10px)',
-              border: activeId === c.id ? '2px solid var(--primary)' : '1px solid var(--border, rgba(0,0,0,.12))',
-              background: activeId === c.id ? 'rgba(59, 130, 246, 0.08)' : 'var(--card-bg, #fff)',
-              cursor: 'pointer',
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setActiveId(c.id)}
-              style={{
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
-                fontWeight: activeId === c.id ? 700 : 500,
-                fontSize: '.85rem',
-                color: 'var(--text)',
-                padding: 0,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-              }}
-            >
-              {c.isGps && <i className="fas fa-location-dot" style={{ color: 'var(--primary)' }} />}
-              <span style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {c.label}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              title="Remove"
-              onClick={e => {
-                e.stopPropagation();
-                removeCity(c.id);
-              }}
-              style={{ padding: '0.15rem 0.35rem', lineHeight: 1 }}
-            >
-              <i className="fas fa-xmark" style={{ fontSize: '.75rem' }} />
+      {/* Locations toolbar */}
+      <div className="wx-toolbar">
+        <div className="wx-cities">
+          {cities.length === 0 ? (
+            <span className="wx-cities-empty">No saved locations yet</span>
+          ) : (
+            cities.map(c => (
+              <div key={c.id} className={`wx-city-chip${activeId === c.id ? ' is-active' : ''}`}>
+                <button type="button" className="wx-city-chip-btn" onClick={() => setActiveId(c.id)}>
+                  {c.isGps && <i className="fas fa-location-dot"></i>}
+                  <span>{c.label}</span>
+                </button>
+                <button
+                  type="button"
+                  className="wx-city-chip-remove"
+                  title="Remove"
+                  onClick={() => removeCity(c.id)}
+                  aria-label="Remove city"
+                >
+                  <i className="fas fa-xmark"></i>
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="wx-add-city">
+          <div className="wx-search">
+            <i className="fas fa-magnifying-glass"></i>
+            <input
+              type="search"
+              placeholder="Add a city…"
+              value={searchQ}
+              onChange={e => setSearchQ(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && runSearch()}
+            />
+            <button type="button" className="wx-search-btn" onClick={runSearch} disabled={searching}>
+              {searching ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-plus"></i>}
             </button>
           </div>
-        ))}
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'center', marginLeft: 'auto' }}>
-          <input
-            type="search"
-            className="form-input"
-            placeholder="Add city…"
-            value={searchQ}
-            onChange={e => setSearchQ(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && runSearch()}
-            style={{ minWidth: '160px', maxWidth: '220px', padding: '0.35rem 0.6rem', fontSize: '.85rem' }}
-          />
-          <button type="button" className="btn btn-primary btn-sm" onClick={runSearch} disabled={searching}>
-            {searching ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-magnifying-glass" />}
-          </button>
         </div>
       </div>
 
       {searchHits.length > 0 && (
-        <div className="card" style={{ marginBottom: '1rem', padding: '0.75rem' }}>
-          <div style={{ fontSize: '.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-            Search results
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+        <div className="wx-search-results">
+          <div className="wx-search-results-title">Search results</div>
+          <div className="wx-search-results-list">
             {searchHits.map(r => (
               <button
                 key={`${r.latitude}-${r.longitude}-${r.name}`}
                 type="button"
+                className="wx-search-hit"
                 onClick={() => addFromSearch(r)}
-                style={{
-                  textAlign: 'left',
-                  padding: '0.5rem 0.65rem',
-                  borderRadius: '8px',
-                  border: '1px solid var(--border, rgba(0,0,0,.08))',
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  fontSize: '.85rem',
-                }}
               >
-                <strong>{r.name}</strong>
-                {r.admin1 && <span style={{ color: 'var(--text-muted)' }}>, {r.admin1}</span>}
-                {r.country && <span style={{ color: 'var(--text-muted)' }}> · {r.country}</span>}
+                <i className="fas fa-map-pin"></i>
+                <span>
+                  <strong>{r.name}</strong>
+                  {r.admin1 && <>, {r.admin1}</>}
+                  {r.country && <> · {r.country}</>}
+                </span>
               </button>
             ))}
           </div>
@@ -427,127 +407,155 @@ export default function Weather() {
       )}
 
       {cities.length === 0 && !loading && (
-        <div className="empty-state">
-          <i className="fas fa-cloud-sun"></i>
-          <h3>No cities yet</h3>
-          <p>Use GPS or search above to add a place.</p>
+        <div className="wx-empty">
+          <div className="wx-empty-icon"><i className="fas fa-cloud-sun"></i></div>
+          <h3>No locations yet</h3>
+          <p>Use GPS or search above to add your first city.</p>
         </div>
       )}
 
       {loading && (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-          <div className="loading-spinner" />
+        <div className="wx-loading">
+          <div className="loading-spinner"></div>
+          <span>Fetching forecast…</span>
         </div>
       )}
 
       {!loading && error && (
-        <div className="alert alert-danger">
-          <i className="fas fa-triangle-exclamation" /> {error}
+        <div className="wx-error">
+          <i className="fas fa-triangle-exclamation"></i>
+          <span>{error}</span>
         </div>
       )}
 
       {!loading && !error && cur && activeCity && (
-        <>
-          <div className="card" style={{ marginBottom: '1.25rem', padding: '1.25rem' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'center' }}>
-              <div style={{ fontSize: '3rem', color: 'var(--primary)' }}>
-                <i className={`fas ${wmoIcon(cur.weather_code)}`} />
+        <div className="wx-body">
+          {/* Current conditions */}
+          <div className={`wx-now ${themeClass}`}>
+            <div className="wx-now-glow" aria-hidden="true"></div>
+            <div className="wx-now-main">
+              <div className="wx-now-location">
+                <i className="fas fa-location-dot"></i>
+                {activeCity.label}
               </div>
-              <div style={{ flex: 1, minWidth: '200px' }}>
-                <div style={{ fontSize: '.85rem', fontWeight: 800, color: 'var(--text)' }}>
-                  {activeCity.label}
+              <div className="wx-now-row">
+                <div className="wx-now-icon">
+                  <i className={`fas ${wmoIcon(cur.weather_code)}`}></i>
                 </div>
-                <div style={{ fontSize: '2.25rem', fontWeight: 800, lineHeight: 1 }}>
-                  {Math.round(cur.temperature_2m)}°C
+                <div className="wx-now-temp">
+                  <span className="wx-now-deg">{Math.round(cur.temperature_2m)}</span>
+                  <span className="wx-now-unit">°C</span>
                 </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '.95rem' }}>
-                  Feels like {Math.round(cur.apparent_temperature)}°C · {wmoLabel(cur.weather_code)}
-                </div>
-                <div style={{ fontSize: '.8rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                  Humidity {cur.relative_humidity_2m}% · Wind {Math.round(cur.wind_speed_10m)} km/h
-                  {typeof cur.wind_direction_10m === 'number' && (
-                    <span> · {Math.round(cur.wind_direction_10m)}°</span>
-                  )}
+                <div className="wx-now-summary">
+                  <div className="wx-now-condition">{wmoLabel(cur.weather_code)}</div>
+                  <div className="wx-now-feels">
+                    Feels like {Math.round(cur.apparent_temperature)}°C
+                  </div>
+                  <div className="wx-now-updated">
+                    Updated {formatHour(cur.time)}
+                  </div>
                 </div>
               </div>
-              <div style={{ fontSize: '.8rem', color: 'var(--text-muted)' }}>
-                <div style={{ fontWeight: 700, color: 'var(--text)', marginBottom: '0.15rem' }}>
-                  {activeCity.label}
-                </div>
+            </div>
+            <div className="wx-now-stats">
+              <div className="wx-stat-pill">
+                <i className="fas fa-droplet"></i>
                 <div>
-                  <i className="fas fa-map-pin" /> {activeCity.lat.toFixed(4)}, {activeCity.lng.toFixed(4)}
+                  <span className="wx-stat-val">{cur.relative_humidity_2m}%</span>
+                  <span className="wx-stat-lbl">Humidity</span>
                 </div>
-                <div style={{ marginTop: '0.25rem' }}>Updated {formatHour(cur.time)}</div>
+              </div>
+              <div className="wx-stat-pill">
+                <i className="fas fa-wind"></i>
+                <div>
+                  <span className="wx-stat-val">{Math.round(cur.wind_speed_10m)} km/h</span>
+                  <span className="wx-stat-lbl">Wind {windCompass(cur.wind_direction_10m)}</span>
+                </div>
+              </div>
+              <div className="wx-stat-pill">
+                <i className="fas fa-compass"></i>
+                <div>
+                  <span className="wx-stat-val">{activeCity.lat.toFixed(2)}°, {activeCity.lng.toFixed(2)}°</span>
+                  <span className="wx-stat-lbl">Coordinates</span>
+                </div>
               </div>
             </div>
           </div>
 
-          <div style={{ fontWeight: 700, fontSize: '.9rem', marginBottom: '0.65rem' }}>
-            <i className="fas fa-clock" /> Next 24 hours
-          </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))',
-              gap: '0.5rem',
-              marginBottom: '1.75rem',
-            }}
-          >
-            {bundle.hourly24.map((h, i) => (
-              <div
-                key={h.time + i}
-                className="card"
-                style={{
-                  padding: '0.5rem 0.35rem',
-                  textAlign: 'center',
-                  fontSize: '.72rem',
-                }}
-              >
-                <div style={{ color: 'var(--text-muted)', marginBottom: '0.25rem' }}>{formatHour(h.time)}</div>
-                <i className={`fas ${wmoIcon(h.code)}`} style={{ color: 'var(--primary)', fontSize: '1.1rem' }} />
-                <div style={{ fontWeight: 700, marginTop: '0.25rem' }}>{h.temp != null ? `${Math.round(h.temp)}°` : '—'}</div>
-                {h.pop != null && <div style={{ color: 'var(--text-muted)' }}>{h.pop}%</div>}
+          {/* Hourly */}
+          <section className="wx-section">
+            <div className="wx-section-head">
+              <div className="wx-section-title">
+                <i className="fas fa-clock"></i> Next 24 Hours
               </div>
-            ))}
-          </div>
-
-          <div style={{ fontWeight: 700, fontSize: '.9rem', marginBottom: '0.65rem' }}>
-            <i className="fas fa-calendar-week" /> 7-day forecast
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {bundle.daily7.map((d, i) => (
-              <div
-                key={d.date + i}
-                className="card"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  padding: '0.65rem 1rem',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div style={{ minWidth: '100px', fontWeight: 600 }}>{formatDay(d.date)}</div>
-                <i className={`fas ${wmoIcon(d.code)}`} style={{ color: 'var(--primary)', fontSize: '1.25rem' }} />
-                <div style={{ flex: 1, fontSize: '.8rem', color: 'var(--text-muted)' }}>{wmoLabel(d.code)}</div>
-                <div style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>
-                  {d.max != null && d.min != null ? (
-                    <>
-                      <span style={{ color: 'var(--text)' }}>{Math.round(d.max)}°</span>
-                      <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}> / {Math.round(d.min)}°</span>
-                    </>
-                  ) : (
-                    '—'
+              <span className="wx-section-badge">Hourly</span>
+            </div>
+            <div className="wx-hourly-scroll">
+              {bundle.hourly24.map((h, i) => (
+                <div key={h.time + i} className={`wx-hour-card${i === 0 ? ' is-now' : ''}`}>
+                  <span className="wx-hour-time">{i === 0 ? 'Now' : formatHour(h.time)}</span>
+                  <i className={`fas ${wmoIcon(h.code)} wx-hour-icon`}></i>
+                  <span className="wx-hour-temp">{h.temp != null ? `${Math.round(h.temp)}°` : '—'}</span>
+                  {h.pop != null && (
+                    <span className="wx-hour-pop">
+                      <i className="fas fa-droplet"></i>{h.pop}%
+                    </span>
                   )}
                 </div>
-                {d.pop != null && (
-                  <div style={{ fontSize: '.75rem', color: 'var(--text-muted)', minWidth: '48px' }}>{d.pop}% rain</div>
-                )}
+              ))}
+            </div>
+          </section>
+
+          {/* 7-day */}
+          <section className="wx-section">
+            <div className="wx-section-head">
+              <div className="wx-section-title">
+                <i className="fas fa-calendar-week"></i> 7-Day Outlook
               </div>
-            ))}
-          </div>
-        </>
+              <span className="wx-section-badge">Extended</span>
+            </div>
+            <div className="wx-daily-list">
+              {bundle.daily7.map((d, i) => {
+                const span = dailyRange.max - dailyRange.min || 1;
+                const lowPct  = ((d.min - dailyRange.min) / span) * 100;
+                const highPct = ((d.max - dailyRange.min) / span) * 100;
+                const barW    = Math.max(highPct - lowPct, 8);
+                return (
+                  <div key={d.date + i} className={`wx-daily-row${i === 0 ? ' is-today' : ''}`}>
+                    <div className="wx-daily-day">
+                      <span className="wx-daily-weekday">{i === 0 ? 'Today' : formatDayShort(d.date)}</span>
+                      <span className="wx-daily-date">{formatDay(d.date)}</span>
+                    </div>
+                    <div className="wx-daily-icon">
+                      <i className={`fas ${wmoIcon(d.code)}`}></i>
+                    </div>
+                    <div className="wx-daily-label">{wmoLabel(d.code)}</div>
+                    <div className="wx-daily-bar-wrap">
+                      <div
+                        className="wx-daily-bar"
+                        style={{ left: `${lowPct}%`, width: `${barW}%` }}
+                      />
+                    </div>
+                    <div className="wx-daily-temps">
+                      <span className="wx-daily-max">{d.max != null ? `${Math.round(d.max)}°` : '—'}</span>
+                      <span className="wx-daily-min">{d.min != null ? `${Math.round(d.min)}°` : '—'}</span>
+                    </div>
+                    {d.pop != null && (
+                      <div className="wx-daily-pop">
+                        <i className="fas fa-droplet"></i>{Math.round(d.pop)}%
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <p className="wx-attribution">
+            <i className="fas fa-cloud"></i> Data provided by Open-Meteo · Geocoding by Open-Meteo &amp; OpenStreetMap
+          </p>
+        </div>
       )}
-    </>
+    </div>
   );
 }
