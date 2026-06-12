@@ -585,10 +585,9 @@ app.get('/api/house-list', requireAuth, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// NEWS (Times of India RSS proxy)
+// NEWS (J&K local news RSS proxy)
 // ══════════════════════════════════════════════════════════════
 
-const TOI = 'https://timesofindia.indiatimes.com';
 const rssParser = new RSSParser({
   timeout: 20000,
   headers: {
@@ -598,79 +597,11 @@ const rssParser = new RSSParser({
   },
 });
 
-// Official TOI RSS endpoints (see https://timesofindia.indiatimes.com/rss.cms)
 const RSS_FEEDS = {
-  // —— Main feeds ——
-  top_stories:    { label: 'Top Stories',      group: 'Main', url: `${TOI}/rssfeedstopstories.cms` },
-  most_recent:    { label: 'Most Recent',      group: 'Main', url: `${TOI}/rssfeedmostrecent.cms` },
-  india:          { label: 'India',            group: 'Main', url: `${TOI}/rssfeeds/-2128936835.cms` },
-  world:          { label: 'World',            group: 'Main', url: `${TOI}/rssfeeds/296589292.cms` },
-  nri:            { label: 'NRI',              group: 'Main', url: `${TOI}/rssfeeds/7098551.cms` },
-  business:       { label: 'Business',         group: 'Main', url: `${TOI}/rssfeeds/1898055.cms` },
-  us:             { label: 'US',               group: 'Main', url: `${TOI}/rssfeeds_us/72258322.cms` },
-  cricket:        { label: 'Cricket',          group: 'Main', url: `${TOI}/rssfeeds/54829575.cms` },
-  sports:         { label: 'Sports',           group: 'Main', url: `${TOI}/rssfeeds/4719148.cms` },
-  science:        { label: 'Science',          group: 'Main', url: `${TOI}/rssfeeds/-2128672765.cms` },
-  environment:    { label: 'Environment',      group: 'Main', url: `${TOI}/rssfeeds/2647163.cms` },
-  tech:           { label: 'Tech',             group: 'Main', url: `${TOI}/rssfeeds/66949542.cms` },
-  education:      { label: 'Education',        group: 'Main', url: `${TOI}/rssfeeds/913168846.cms` },
-  entertainment:  { label: 'Entertainment',    group: 'Main', url: `${TOI}/rssfeeds/1081479906.cms` },
-  life_style:     { label: 'Life & Style',     group: 'Main', url: `${TOI}/rssfeeds/2886704.cms` },
-  most_read:      { label: 'Most Read',        group: 'Main', url: `${TOI}/rssfeedmostread.cms` },
-  most_shared:    { label: 'Most Shared',      group: 'Main', url: `${TOI}/rssfeedmostshared.cms` },
-  most_commented: { label: 'Most Commented',   group: 'Main', url: `${TOI}/rssfeedmostcommented.cms` },
-  astrology:      { label: 'Astrology',        group: 'Main', url: `${TOI}/rssfeeds/65857041.cms` },
-  auto:           { label: 'Auto',             group: 'Main', url: `${TOI}/rssfeeds/74317216.cms` },
-
-  // —— Cities ——
-  mumbai:              { label: 'Mumbai',               group: 'Cities', url: `${TOI}/rssfeeds/-2128838597.cms` },
-  delhi:               { label: 'Delhi',                group: 'Cities', url: `${TOI}/rssfeeds/-2128839596.cms` },
-  bengaluru:           { label: 'Bengaluru',            group: 'Cities', url: `${TOI}/rssfeeds/-2128833038.cms` },
-  hyderabad:           { label: 'Hyderabad',            group: 'Cities', url: `${TOI}/rssfeeds/-2128816011.cms` },
-  chennai:             { label: 'Chennai',              group: 'Cities', url: `${TOI}/rssfeeds/2950623.cms` },
-  ahmedabad:           { label: 'Ahmedabad',            group: 'Cities', url: `${TOI}/rssfeeds/-2128821153.cms` },
-  allahabad:           { label: 'Prayagraj (Allahabad)', group: 'Cities', url: `${TOI}/rssfeeds/3947060.cms` },
-  bhubaneswar:         { label: 'Bhubaneswar',          group: 'Cities', url: `${TOI}/rssfeeds/4118235.cms` },
-  coimbatore:          { label: 'Coimbatore',           group: 'Cities', url: `${TOI}/rssfeeds/7503091.cms` },
-  gurgaon:             { label: 'Gurgaon',              group: 'Cities', url: `${TOI}/rssfeeds/6547154.cms` },
-  guwahati:            { label: 'Guwahati',             group: 'Cities', url: `${TOI}/rssfeeds/4118215.cms` },
-  hubli:               { label: 'Hubli',                group: 'Cities', url: `${TOI}/rssfeeds/3942695.cms` },
-  kanpur:              { label: 'Kanpur',               group: 'Cities', url: `${TOI}/rssfeeds/3947067.cms` },
-  kolkata:             { label: 'Kolkata',              group: 'Cities', url: `${TOI}/rssfeeds/-2128830821.cms` },
-  ludhiana:            { label: 'Ludhiana',             group: 'Cities', url: `${TOI}/rssfeeds/3947051.cms` },
-  mangalore:           { label: 'Mangalore',            group: 'Cities', url: `${TOI}/rssfeeds/3942690.cms` },
-  mysore:              { label: 'Mysore',               group: 'Cities', url: `${TOI}/rssfeeds/3942693.cms` },
-  noida:               { label: 'Noida',                group: 'Cities', url: `${TOI}/rssfeeds/8021716.cms` },
-  pune:                { label: 'Pune',                 group: 'Cities', url: `${TOI}/rssfeeds/-2128821991.cms` },
-  goa:                 { label: 'Goa',                  group: 'Cities', url: `${TOI}/rssfeeds/3012535.cms` },
-  chandigarh:          { label: 'Chandigarh',           group: 'Cities', url: `${TOI}/rssfeeds/-2128816762.cms` },
-  lucknow:             { label: 'Lucknow',              group: 'Cities', url: `${TOI}/rssfeeds/-2128819658.cms` },
-  patna:               { label: 'Patna',                group: 'Cities', url: `${TOI}/rssfeeds/-2128817995.cms` },
-  jaipur:              { label: 'Jaipur',               group: 'Cities', url: `${TOI}/rssfeeds/3012544.cms` },
-  nagpur:              { label: 'Nagpur',               group: 'Cities', url: `${TOI}/rssfeeds/442002.cms` },
-  rajkot:              { label: 'Rajkot',               group: 'Cities', url: `${TOI}/rssfeeds/3942663.cms` },
-  ranchi:              { label: 'Ranchi',               group: 'Cities', url: `${TOI}/rssfeeds/4118245.cms` },
-  surat:               { label: 'Surat',                group: 'Cities', url: `${TOI}/rssfeeds/3942660.cms` },
-  vadodara:            { label: 'Vadodara',             group: 'Cities', url: `${TOI}/rssfeeds/3942666.cms` },
-  varanasi:            { label: 'Varanasi',             group: 'Cities', url: `${TOI}/rssfeeds/3947071.cms` },
-  thane:               { label: 'Thane',                group: 'Cities', url: `${TOI}/rssfeeds/3831863.cms` },
-  thiruvananthapuram:  { label: 'Thiruvananthapuram',   group: 'Cities', url: `${TOI}/rssfeeds/878156304.cms` },
-
-  // Jammu & Kashmir: Srinagar/Jammu are not on TOI’s public rss.cms city list; India national RSS routinely leads with UT stories.
-  jammu_kashmir: { label: 'Jammu & Kashmir (India headlines)', group: 'Cities', url: `${TOI}/rssfeeds/-2128936835.cms` },
-
-  // —— World (section feeds) ——
-  world_us:        { label: 'US (World)',      group: 'World', url: `${TOI}/rssfeeds/30359486.cms` },
-  pakistan:        { label: 'Pakistan',        group: 'World', url: `${TOI}/rssfeeds/30359534.cms` },
-  south_asia:      { label: 'South Asia',      group: 'World', url: `${TOI}/rssfeeds/3907412.cms` },
-  uk:              { label: 'UK',              group: 'World', url: `${TOI}/rssfeeds/2177298.cms` },
-  europe:          { label: 'Europe',          group: 'World', url: `${TOI}/rssfeeds/1898274.cms` },
-  china:           { label: 'China',           group: 'World', url: `${TOI}/rssfeeds/1898184.cms` },
-  middle_east:     { label: 'Middle East',     group: 'World', url: `${TOI}/rssfeeds/1898272.cms` },
-  rest_of_world:   { label: 'Rest of World',   group: 'World', url: `${TOI}/rssfeeds/671314.cms` },
-
-  // —— Blogs ——
-  all_blogs: { label: 'All Blogs', group: 'Blogs', url: 'https://blogs.timesofindia.indiatimes.com/feed/defaultrss' },
+  greater_kashmir:  { label: 'Greater Kashmir',  group: 'Jammu & Kashmir', url: 'https://www.greaterkashmir.com/feed/' },
+  kashmir_reader:   { label: 'Kashmir Reader',   group: 'Jammu & Kashmir', url: 'https://kashmirreader.com/feed/' },
+  kashmir_observer: { label: 'Kashmir Observer', group: 'Jammu & Kashmir', url: 'https://kashmirobserver.net/feed/' },
+  rising_kashmir:   { label: 'Rising Kashmir',   group: 'Jammu & Kashmir', url: 'https://risingkashmir.com/feed/' },
 };
 
 function rssItemImage(item) {
@@ -682,7 +613,7 @@ function rssItemImage(item) {
 }
 
 app.get('/api/news', requireAuth, async (req, res) => {
-  const key  = req.query.feed || 'jammu_kashmir';
+  const key  = req.query.feed || 'greater_kashmir';
   const feed = RSS_FEEDS[key];
   if (!feed) return res.json({ success: false, message: 'Unknown feed key.' });
   try {
@@ -694,14 +625,14 @@ app.get('/api/news', requireAuth, async (req, res) => {
       pubDate:     item.pubDate      || '',
       image:       rssItemImage(item),
     }));
-    res.json({ success: true, label: feed.label, items });
+    res.json({ success: true, label: feed.label, source: parsed.title || feed.label, items });
   } catch (e) {
     console.error('RSS fetch error:', e.message);
     res.json({ success: false, message: 'Could not fetch news feed. Please try again.' });
   }
 });
 
-const RSS_GROUP_ORDER = ['Main', 'Cities', 'World', 'Blogs'];
+const RSS_GROUP_ORDER = ['Jammu & Kashmir'];
 app.get('/api/news/feeds', requireAuth, (req, res) => {
   const rank = g => {
     const i = RSS_GROUP_ORDER.indexOf(g);

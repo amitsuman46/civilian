@@ -16,11 +16,11 @@ function stripHtml(html) {
   return html ? html.replace(/<[^>]*>/g, '').trim() : '';
 }
 
-const GROUP_ORDER = ['Main', 'Cities', 'World', 'Blogs'];
+const GROUP_ORDER = ['Jammu & Kashmir'];
 
 export default function News() {
   const [feeds, setFeeds]       = useState([]);
-  const [feedKey, setFeedKey]   = useState('jammu_kashmir');
+  const [feedKey, setFeedKey]   = useState('greater_kashmir');
   const [refreshKey, setRefreshKey] = useState(0);
   const [articles, setArticles] = useState([]);
   const [label, setLabel]       = useState('');
@@ -69,7 +69,7 @@ export default function News() {
       <div className="page-header">
         <div>
           <div className="page-title"><i className="fas fa-newspaper"></i> News Feed</div>
-          <div className="page-subtitle">Latest headlines from Times of India{label ? ` — ${label}` : ''}</div>
+          <div className="page-subtitle">Local news from Jammu & Kashmir{label ? ` — ${label}` : ''}</div>
         </div>
         <div className="page-actions">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
