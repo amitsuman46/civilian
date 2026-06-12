@@ -4,7 +4,8 @@ import Navbar from '../components/Navbar';
 const PAGE_TITLES = {
   '/dashboard':         'Dashboard',
   '/dashboard/add':     'Add Data',
-  '/dashboard/view':    'View Data',
+  '/dashboard/view':       'View Data',
+  '/dashboard/directory': 'Civil Directory',
   '/dashboard/update':  'Update / Delete',
   '/dashboard/houseno': 'Assign House No',
   '/dashboard/about':   'About',

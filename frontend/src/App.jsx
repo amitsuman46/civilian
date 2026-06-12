@@ -8,6 +8,7 @@ import Dashboard     from './pages/Dashboard';
 import Home          from './pages/Home';
 import AddData       from './pages/AddData';
 import ViewData      from './pages/ViewData';
+import CivilDirectory from './pages/CivilDirectory';
 import UpdateDelete  from './pages/UpdateDelete';
 import EditRecord    from './pages/EditRecord';
 import FullReport    from './pages/FullReport';
@@ -40,6 +41,7 @@ export default function App() {
                 <Route index          element={<Home />} />
                 <Route path="add"     element={<AddData />} />
                 <Route path="view"    element={<ViewData />} />
+                <Route path="directory" element={<CivilDirectory />} />
                 <Route path="update"  element={<UpdateDelete />} />
                 <Route path="edit/:id"   element={<EditRecord />} />
                 <Route path="report/:id" element={<FullReport />} />

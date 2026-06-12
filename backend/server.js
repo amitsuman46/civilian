@@ -435,9 +435,13 @@ app.get('/api/search', requireAuth, async (req, res) => {
         SELECT * FROM civilians
         WHERE name LIKE ? OR mobile LIKE ? OR village LIKE ?
            OR area LIKE ? OR occupation LIKE ? OR health_status LIKE ?
-           OR family_details LIKE ?
+           OR family_details LIKE ? OR house_no LIKE ?
+           OR community LIKE ? OR religion LIKE ?
+           OR immovable_property LIKE ? OR movable_property LIKE ?
+           OR CAST(salary AS CHAR) LIKE ? OR CAST(income AS CHAR) LIKE ?
+           OR CAST(expenditure AS CHAR) LIKE ?
         ORDER BY created_at DESC
-      `, Array(7).fill(like));
+      `, Array(14).fill(like));
     }
     res.json({ success: true, records, mode });
   } catch (e) {
