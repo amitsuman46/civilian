@@ -13,10 +13,6 @@ const COLUMNS = [
   { key: 'area',        label: 'Area',        sortable: true },
 ];
 
-function initials(name) {
-  return (name || '?').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
-}
-
 function compareValues(a, b, key) {
   return String(a[key] || '').localeCompare(String(b[key] || ''), undefined, { sensitivity: 'base' });
 }
@@ -180,7 +176,6 @@ export default function CivilDirectory() {
             <table className="cdir-table cdir-table--simple">
               <thead>
                 <tr>
-                  <th className="cdir-th cdir-th--avatar"> </th>
                   {COLUMNS.map(col => (
                     <th
                       key={col.key}
@@ -198,9 +193,6 @@ export default function CivilDirectory() {
               <tbody>
                 {pageRows.map(r => (
                   <tr key={r.id} className="cdir-row">
-                    <td className="cdir-td cdir-td--avatar">
-                      <div className="cdir-avatar-fallback">{initials(r.name)}</div>
-                    </td>
                     {COLUMNS.map(col => (
                       <td key={col.key} className={`cdir-td${col.sticky ? ' cdir-td--sticky' : ''}`}>
                         {col.key === 'name' ? (

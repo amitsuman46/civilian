@@ -45,7 +45,7 @@ function DashFilters({ filters, onChange, onClear, hasActive, compact }) {
     <div className={`dash-filters${compact ? ' dash-filters--compact' : ''}`}>
       <div className="dash-filters-fields">
         <label className="dash-filter-field">
-          <span className="dash-filter-label"><i className="fas fa-shield-halved"></i> Company</span>
+          <span className="dash-filter-label"><i className="fas fa-shield-halved"></i> Area / Zone</span>
           <select
             value={filters.area}
             onChange={e => onChange({ ...filters, area: e.target.value })}
@@ -95,6 +95,7 @@ export default function Home() {
   const [loading, setLoading]     = useState(true);
   const [filters, setFilters]     = useState({ area: '', village: '' });
   const [stickyVisible, setStickyVisible] = useState(false);
+  const [regChartView, setRegChartView]   = useState('daily');
 
   const filterBarRef = useRef(null);
 
@@ -338,22 +339,39 @@ export default function Home() {
         ))}
       </div>
 
-      {/* Charts Row 1 */}
-      <div className="dash-charts-row equal">
-        <div className="dash-chart-card">
-          <div className="dash-chart-header">
-            <div className="dash-chart-title"><i className="fas fa-chart-line"></i> Daily Registrations</div>
-            <span className="dash-chart-badge">Last 30 days</span>
+      {/* Registrations — daily / monthly toggle */}
+      <div className="dash-chart-card dash-reg-chart-card">
+        <div className="dash-chart-header">
+          <div className="dash-chart-title">
+            <i className={`fas ${regChartView === 'daily' ? 'fa-chart-line' : 'fa-chart-bar'}`}></i>
+            Registrations
+            <span className="dash-reg-period" role="group" aria-label="Registration chart period">
+              <button
+                type="button"
+                className={`dash-reg-period-btn${regChartView === 'daily' ? ' is-active' : ''}`}
+                onClick={() => setRegChartView('daily')}
+              >
+                Daily
+              </button>
+              <span className="dash-reg-period-sep" aria-hidden="true">|</span>
+              <button
+                type="button"
+                className={`dash-reg-period-btn${regChartView === 'monthly' ? ' is-active' : ''}`}
+                onClick={() => setRegChartView('monthly')}
+              >
+                Monthly
+              </button>
+            </span>
           </div>
-          {stats && <Line data={dayChartData} options={lineOpts} />}
+          <span className="dash-chart-badge">
+            {regChartView === 'daily' ? 'Last 30 days' : 'Last 6 months'}
+          </span>
         </div>
-        <div className="dash-chart-card">
-          <div className="dash-chart-header">
-            <div className="dash-chart-title"><i className="fas fa-chart-bar"></i> Monthly Registrations</div>
-            <span className="dash-chart-badge">Last 6 months</span>
-          </div>
-          {stats && <Bar data={monthChartData} options={barOpts} />}
-        </div>
+        {stats && (
+          regChartView === 'daily'
+            ? <Line key="daily" data={dayChartData} options={lineOpts} />
+            : <Bar key="monthly" data={monthChartData} options={barOpts} />
+        )}
       </div>
 
       {/* Charts Row 2 */}
