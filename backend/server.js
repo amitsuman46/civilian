@@ -9,6 +9,10 @@ const RSSParser = require('rss-parser');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const isProd = process.env.NODE_ENV === 'production';
+const DIST_DIR = path.join(__dirname, '../frontend/dist');
+
+if (isProd) app.set('trust proxy', 1);
 
 // ── Database pool ──────────────────────────────────────────────
 const pool = mysql.createPool({
@@ -26,14 +30,21 @@ const UPLOADS_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 // ── Middleware ─────────────────────────────────────────────────
-app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:3000'], credentials: true }));
+if (!isProd) {
+  app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:3000'], credentials: true }));
+}
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(session({
-  secret: 'civilian-dbms-secret-2025',
+  secret: process.env.SESSION_SECRET || 'civilian-dbms-secret-2025',
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, maxAge: 24 * 60 * 60 * 1000 },
+  cookie: {
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000,
+    secure: isProd,
+    sameSite: 'lax',
+  },
 }));
 app.use('/uploads', express.static(UPLOADS_DIR));
 
@@ -644,10 +655,23 @@ app.get('/api/news/feeds', requireAuth, (req, res) => {
   res.json({ success: true, feeds });
 });
 
+// ── React frontend (production) ────────────────────────────────
+if (fs.existsSync(DIST_DIR)) {
+  app.use(express.static(DIST_DIR));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) return next();
+    res.sendFile(path.join(DIST_DIR, 'index.html'));
+  });
+} else if (isProd) {
+  console.warn(`Frontend build not found at ${DIST_DIR} — run "npm run build" in frontend/`);
+}
+
 // ── Start server ───────────────────────────────────────────────
 initDirectoryTable()
   .then(() => {
-    app.listen(PORT, () => console.log(`Civilian backend running on http://localhost:${PORT}`));
+    app.listen(PORT, () => {
+      console.log(`Civilian backend running on port ${PORT} (${isProd ? 'production' : 'development'})`);
+    });
   })
   .catch(err => {
     console.error('Failed to init civil_directory table:', err);

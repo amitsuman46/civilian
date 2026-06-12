@@ -33,8 +33,8 @@ function PublicRoute({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <ToastProvider>
+      <ToastProvider>
+        <AuthProvider>
           <ConfirmProvider>
             <Routes>
               <Route path="/" element={<PublicRoute><Login /></PublicRoute>} />
@@ -56,8 +56,8 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </ConfirmProvider>
-        </ToastProvider>
-      </AuthProvider>
+        </AuthProvider>
+      </ToastProvider>
     </BrowserRouter>
   );
 }
