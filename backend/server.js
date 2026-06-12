@@ -94,6 +94,22 @@ const DEFINED_VILLAGES = [
   'Sawjian(Gantar)','Sawjian(Sundri)',
 ];
 
+function parseDashFilters(query) {
+  const area    = DEFINED_AREAS.includes(query.area)       ? query.area    : null;
+  const village = DEFINED_VILLAGES.includes(query.village) ? query.village : null;
+  const parts   = [];
+  const params  = [];
+  if (area)    { parts.push('area = ?');    params.push(area); }
+  if (village) { parts.push('village = ?'); params.push(village); }
+  const sql = parts.join(' AND ');
+  return {
+    area, village,
+    params,
+    where: sql ? `WHERE ${sql}` : '',
+    and:   sql ? `AND ${sql}`   : '',
+  };
+}
+
 // ══════════════════════════════════════════════════════════════
 // AUTH ROUTES
 // ══════════════════════════════════════════════════════════════
@@ -133,6 +149,8 @@ app.get('/api/me', (req, res) => {
 
 app.get('/api/stats', requireAuth, async (req, res) => {
   try {
+    const f = parseDashFilters(req.query);
+
     // KPI counts
     const [[kpi]] = await pool.query(`
       SELECT
@@ -141,15 +159,17 @@ app.get('/api/stats', requireAuth, async (req, res) => {
         SUM(created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS week,
         SUM(YEAR(created_at)=YEAR(NOW()) AND MONTH(created_at)=MONTH(NOW())) AS month
       FROM civilians
-    `);
+      ${f.where}
+    `, f.params);
 
     // Daily (last 30 days)
     const [rawDaily] = await pool.query(`
       SELECT DATE(created_at) AS dt, COUNT(*) AS cnt
       FROM civilians
       WHERE created_at >= CURDATE() - INTERVAL 29 DAY
+      ${f.and}
       GROUP BY DATE(created_at)
-    `);
+    `, f.params);
     const dailyMap = Object.fromEntries(rawDaily.map(r => [r.dt.toISOString().slice(0,10), Number(r.cnt)]));
     const daily = [];
     for (let i = 29; i >= 0; i--) {
@@ -164,8 +184,9 @@ app.get('/api/stats', requireAuth, async (req, res) => {
       SELECT DATE_FORMAT(created_at,'%Y-%m') AS ym, COUNT(*) AS cnt
       FROM civilians
       WHERE created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+      ${f.and}
       GROUP BY ym ORDER BY ym
-    `);
+    `, f.params);
     const monthMap = Object.fromEntries(rawMonthly.map(r => [r.ym, Number(r.cnt)]));
     const monthly = [];
     for (let i = 5; i >= 0; i--) {
@@ -178,21 +199,26 @@ app.get('/api/stats', requireAuth, async (req, res) => {
     // Area-wise
     const [rawArea] = await pool.query(`
       SELECT area, COUNT(*) AS cnt FROM civilians
-      WHERE area IS NOT NULL AND area != '' GROUP BY area
-    `);
+      WHERE area IS NOT NULL AND area != ''
+      ${f.and}
+      GROUP BY area
+    `, f.params);
     const areaMap = Object.fromEntries(rawArea.map(r => [r.area, Number(r.cnt)]));
     const area = DEFINED_AREAS.map(a => ({ label: a, count: areaMap[a] || 0 }));
 
     // Village-wise
     const [rawVillage] = await pool.query(`
       SELECT village, COUNT(*) AS cnt FROM civilians
-      WHERE village IS NOT NULL AND village != '' GROUP BY village
-    `);
+      WHERE village IS NOT NULL AND village != ''
+      ${f.and}
+      GROUP BY village
+    `, f.params);
     const villageMap = Object.fromEntries(rawVillage.map(r => [r.village, Number(r.cnt)]));
     const village = DEFINED_VILLAGES.map(v => ({ label: v, count: villageMap[v] || 0 }));
 
     res.json({
       success: true,
+      filters: { area: f.area, village: f.village },
       kpi: { total: Number(kpi.total), today: Number(kpi.today), week: Number(kpi.week), month: Number(kpi.month) },
       daily, monthly, area, village,
     });
@@ -219,10 +245,13 @@ app.get('/api/civilians', requireAuth, async (req, res) => {
 // GET map pins (must be before /:id to avoid route conflict)
 app.get('/api/civilians/map-pins', requireAuth, async (req, res) => {
   try {
+    const f = parseDashFilters(req.query);
     const [pins] = await pool.query(
-      'SELECT id, name, house_no, area, lat, lng FROM civilians WHERE lat IS NOT NULL AND lng IS NOT NULL'
+      `SELECT id, name, house_no, area, lat, lng FROM civilians
+       WHERE lat IS NOT NULL AND lng IS NOT NULL ${f.and}`,
+      f.params
     );
-    res.json({ success: true, pins });
+    res.json({ success: true, pins, filters: { area: f.area, village: f.village } });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'DB error' });
   }

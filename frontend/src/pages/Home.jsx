@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import {
@@ -13,6 +13,14 @@ import API from '../api';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 
+const AREAS    = ['A Coy','B Coy','C Coy','D Coy','E Coy','F Coy','HQ Coy'];
+const VILLAGES = [
+  'Gagariyan','Barmiya and Doba','Upper Gagariyan','Wazli','kainth',
+  'Sawjiya(Maidan)','Sawjiya','Sawjian(Mir Muhallah)','Sawjian(Bandi Muhallah)',
+  'Sawjian(Ladhi Muhallah)','Sawjian(Purya Muhallah)','Sawjian(Tantary Muhallah)',
+  'Sawjian(Gantar)','Sawjian(Sundri)',
+];
+
 const chartFont  = { family: 'Inter, system-ui, sans-serif', size: 11 };
 const gridColor  = 'rgba(226,232,240,.8)';
 const tickConfig = { font: chartFont, color: '#94a3b8' };
@@ -24,20 +32,108 @@ const tooltipDefaults = {
   cornerRadius: 6,
 };
 
+function buildQuery(filters) {
+  const params = new URLSearchParams();
+  if (filters.area)    params.set('area', filters.area);
+  if (filters.village) params.set('village', filters.village);
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+function DashFilters({ filters, onChange, onClear, hasActive, compact }) {
+  return (
+    <div className={`dash-filters${compact ? ' dash-filters--compact' : ''}`}>
+      <div className="dash-filters-fields">
+        <label className="dash-filter-field">
+          <span className="dash-filter-label"><i className="fas fa-shield-halved"></i> Company</span>
+          <select
+            value={filters.area}
+            onChange={e => onChange({ ...filters, area: e.target.value })}
+          >
+            <option value="">All Companies</option>
+            {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </label>
+        <label className="dash-filter-field">
+          <span className="dash-filter-label"><i className="fas fa-location-dot"></i> Village</span>
+          <select
+            value={filters.village}
+            onChange={e => onChange({ ...filters, village: e.target.value })}
+          >
+            <option value="">All Villages</option>
+            {VILLAGES.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </label>
+      </div>
+      {hasActive && (
+        <div className="dash-filters-active">
+          {filters.area && (
+            <span className="dash-filter-chip">
+              <i className="fas fa-shield-halved"></i> {filters.area}
+              <button type="button" aria-label="Remove company filter" onClick={() => onChange({ ...filters, area: '' })}>×</button>
+            </span>
+          )}
+          {filters.village && (
+            <span className="dash-filter-chip">
+              <i className="fas fa-location-dot"></i> {filters.village}
+              <button type="button" aria-label="Remove village filter" onClick={() => onChange({ ...filters, village: '' })}>×</button>
+            </span>
+          )}
+          <button type="button" className="dash-filter-clear" onClick={onClear}>
+            <i className="fas fa-xmark"></i> Clear all
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
-  const { user }   = useAuth();
-  const [stats, setStats]       = useState(null);
-  const [mapPins, setMapPins]   = useState([]);
-  const [mapFilter, setMapFilter] = useState('All');
+  const { user } = useAuth();
+  const [stats, setStats]         = useState(null);
+  const [mapPins, setMapPins]     = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [filters, setFilters]     = useState({ area: '', village: '' });
+  const [stickyVisible, setStickyVisible] = useState(false);
+
+  const filterBarRef = useRef(null);
 
   const hour     = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const dateStr  = new Date().toLocaleDateString('en-GB', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
 
-  useEffect(() => {
-    API.get('/api/stats').then(data => { if (data.success) setStats(data); });
-    API.get('/api/civilians/map-pins').then(data => { if (data.success) setMapPins(data.pins); });
+  const hasActiveFilters = Boolean(filters.area || filters.village);
+
+  const fetchDashboard = useCallback(async (activeFilters) => {
+    setLoading(true);
+    const qs = buildQuery(activeFilters);
+    try {
+      const [statsData, pinsData] = await Promise.all([
+        API.get(`/api/stats${qs}`),
+        API.get(`/api/civilians/map-pins${qs}`),
+      ]);
+      if (statsData.success) setStats(statsData);
+      if (pinsData.success)  setMapPins(pinsData.pins);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { fetchDashboard(filters); }, [filters, fetchDashboard]);
+
+  useEffect(() => {
+    const el = filterBarRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setStickyVisible(!entry.isIntersecting),
+      { threshold: 0, rootMargin: '-66px 0px 0px 0px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const handleFilterChange = next => setFilters(next);
+  const clearFilters = () => setFilters({ area: '', village: '' });
 
   const total = stats?.kpi?.total ?? 0;
   const today = stats?.kpi?.today ?? 0;
@@ -136,8 +232,52 @@ export default function Home() {
     },
   };
 
+  const filterBadge = hasActiveFilters
+    ? [filters.area, filters.village].filter(Boolean).join(' · ')
+    : 'All records';
+
   return (
     <>
+      {/* Sticky filter banner — appears after scrolling past the main filter bar */}
+      <div className={`dash-filters-sticky${stickyVisible ? ' is-visible' : ''}`} aria-hidden={!stickyVisible}>
+        <div className="dash-filters-sticky-inner container">
+          <div className="dash-filters-sticky-left">
+            <i className="fas fa-filter"></i>
+            <span className="dash-filters-sticky-title">Dashboard Filters</span>
+            {hasActiveFilters ? (
+              <div className="dash-filters-sticky-chips">
+                {filters.area && (
+                  <span className="dash-filter-chip dash-filter-chip--sticky">
+                    <i className="fas fa-shield-halved"></i> {filters.area}
+                  </span>
+                )}
+                {filters.village && (
+                  <span className="dash-filter-chip dash-filter-chip--sticky">
+                    <i className="fas fa-location-dot"></i> {filters.village}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <span className="dash-filters-sticky-hint">No filters applied</span>
+            )}
+          </div>
+          <div className="dash-filters-sticky-right">
+            <DashFilters
+              compact
+              filters={filters}
+              onChange={handleFilterChange}
+              onClear={clearFilters}
+              hasActive={hasActiveFilters}
+            />
+            {hasActiveFilters && (
+              <button type="button" className="dash-filter-clear dash-filter-clear--sticky" onClick={clearFilters}>
+                <i className="fas fa-xmark"></i> Clear
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Welcome Banner */}
       <div className="dash-welcome">
         <div className="dash-welcome-text">
@@ -149,6 +289,9 @@ export default function Home() {
             &nbsp;·&nbsp;
             <i className="fas fa-database"></i>
             {total.toLocaleString()} record{total !== 1 ? 's' : ''} on file
+            {hasActiveFilters && (
+              <span className="dash-filtered-indicator"> &nbsp;·&nbsp; filtered</span>
+            )}
           </div>
         </div>
         <div className="dash-welcome-actions">
@@ -161,8 +304,24 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Global Filters */}
+      <div className="dash-filters-card" ref={filterBarRef}>
+        <div className="dash-filters-card-header">
+          <div className="dash-filters-card-title">
+            <i className="fas fa-filter"></i> Global Filters
+          </div>
+          <span className="dash-chart-badge">{filterBadge}</span>
+        </div>
+        <DashFilters
+          filters={filters}
+          onChange={handleFilterChange}
+          onClear={clearFilters}
+          hasActive={hasActiveFilters}
+        />
+      </div>
+
       {/* KPI Cards */}
-      <div className="kpi-grid">
+      <div className={`kpi-grid${loading ? ' dash-loading' : ''}`}>
         {[
           { color:'blue',   icon:'fa-users',         value: total, label: 'Total Records' },
           { color:'green',  icon:'fa-user-plus',      value: today, label: 'Added Today' },
@@ -202,77 +361,63 @@ export default function Home() {
         <div className="dash-chart-card">
           <div className="dash-chart-header">
             <div className="dash-chart-title"><i className="fas fa-chart-simple"></i> Village-wise Distribution</div>
-            <span className="dash-chart-badge">All villages</span>
+            <span className="dash-chart-badge">{hasActiveFilters ? 'Filtered' : 'All villages'}</span>
           </div>
           {stats && <Bar data={villageChartData} options={villageOpts} style={{ maxHeight: '360px' }} />}
         </div>
         <div className="dash-chart-card">
           <div className="dash-chart-header">
             <div className="dash-chart-title"><i className="fas fa-shield-halved"></i> Company-wise Breakdown</div>
-            <span className="dash-chart-badge">All Coys</span>
+            <span className="dash-chart-badge">{hasActiveFilters ? 'Filtered' : 'All Coys'}</span>
           </div>
           {stats && <Bar data={areaChartData} options={areaOpts} style={{ maxHeight: '360px' }} />}
         </div>
       </div>
 
       {/* Civilian Locations Map */}
-      {(() => {
-        const AREAS = ['All', 'A Coy', 'B Coy', 'C Coy', 'D Coy', 'E Coy', 'F Coy', 'HQ Coy'];
-        const filtered = mapFilter === 'All' ? mapPins : mapPins.filter(p => p.area === mapFilter);
-        return (
-          <div className="dash-chart-card" style={{ marginBottom: '1rem' }}>
-            <div className="dash-chart-header">
-              <div className="dash-chart-title"><i className="fas fa-map-location-dot"></i> Civilian Locations</div>
-              <span className="dash-chart-badge">{filtered.length} of {mapPins.length} pinned</span>
-              <select
-                value={mapFilter}
-                onChange={e => setMapFilter(e.target.value)}
-                style={{ marginLeft: 'auto', padding: '0.25rem 0.5rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', fontSize: '.8rem', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer' }}
-              >
-                {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
-            </div>
+      <div className="dash-chart-card" style={{ marginBottom: '1rem' }}>
+        <div className="dash-chart-header">
+          <div className="dash-chart-title"><i className="fas fa-map-location-dot"></i> Civilian Locations</div>
+          <span className="dash-chart-badge">{mapPins.length} pinned{hasActiveFilters ? ' (filtered)' : ''}</span>
+        </div>
 
-            {mapPins.length === 0 ? (
-              <div style={{ height: '380px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '.875rem', flexDirection: 'column', gap: '.5rem' }}>
-                <i className="fas fa-map-pin" style={{ fontSize: '2rem', opacity: .3 }}></i>
-                <span>No pinned records yet. Use the map picker when adding a record.</span>
-              </div>
-            ) : filtered.length === 0 ? (
-              <div style={{ height: '380px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '.875rem', flexDirection: 'column', gap: '.5rem' }}>
-                <i className="fas fa-map-pin" style={{ fontSize: '2rem', opacity: .3 }}></i>
-                <span>No pinned records for <strong>{mapFilter}</strong>.</span>
-              </div>
-            ) : (
-              <MapContainer
-                center={[20.5937, 78.9629]}
-                zoom={5}
-                style={{ height: '380px', width: '100%', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)' }}
-                scrollWheelZoom={false}
-              >
-                <TileLayer
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
-                />
-                {filtered.map(pin => (
-                  <Marker key={pin.id} position={[pin.lat, pin.lng]}>
-                    <Popup>
-                      <div style={{ lineHeight: 1.7, minWidth: '130px' }}>
-                        <strong>{pin.name}</strong><br />
-                        {pin.house_no && <span style={{ fontSize: '.8rem', color: '#555' }}>H/No {pin.house_no}</span>}<br />
-                        {pin.area && <span style={{ fontSize: '.8rem', color: '#888' }}>{pin.area}</span>}<br />
-                        <Link to={`/dashboard/report/${pin.id}`} style={{ fontSize: '.8rem', color: '#1d4ed8' }}>
-                          View Report →
-                        </Link>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
-              </MapContainer>
-            )}
+        {mapPins.length === 0 ? (
+          <div className="dash-map-empty">
+            <i className="fas fa-map-pin"></i>
+            <span>
+              {hasActiveFilters
+                ? <>No pinned records match the current filters.</>
+                : <>No pinned records yet. Use the map picker when adding a record.</>}
+            </span>
           </div>
-        );
-      })()}
+        ) : (
+          <MapContainer
+            center={[20.5937, 78.9629]}
+            zoom={5}
+            style={{ height: '380px', width: '100%', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)' }}
+            scrollWheelZoom={false}
+          >
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
+            />
+            {mapPins.map(pin => (
+              <Marker key={pin.id} position={[pin.lat, pin.lng]}>
+                <Popup>
+                  <div style={{ lineHeight: 1.7, minWidth: '130px' }}>
+                    <strong>{pin.name}</strong><br />
+                    {pin.house_no && <span style={{ fontSize: '.8rem', color: '#555' }}>H/No {pin.house_no}</span>}<br />
+                    {pin.area && <span style={{ fontSize: '.8rem', color: '#888' }}>{pin.area}</span>}<br />
+                    <Link to={`/dashboard/report/${pin.id}`} style={{ fontSize: '.8rem', color: '#1d4ed8' }}>
+                      View Report →
+                    </Link>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
+        )}
+      </div>
     </>
   );
 }
