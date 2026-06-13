@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import MapResize from '../components/MapResize';
 import {
   Chart as ChartJS,
   CategoryScale, LinearScale,
@@ -415,6 +416,7 @@ export default function Home() {
             style={{ height: '380px', width: '100%', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)' }}
             scrollWheelZoom={false}
           >
+            <MapResize />
             <TileLayer
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"

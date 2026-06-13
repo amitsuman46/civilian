@@ -3,3 +3,10 @@ backend/uploads/
 *.env
 .DS_Store
 .claude/
+
+# Build outputs
+frontend/dist/
+backend/public/
+
+# Deployment artifacts
+civilian-app.zip

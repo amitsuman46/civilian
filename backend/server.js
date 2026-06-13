@@ -10,15 +10,33 @@ const RSSParser = require('rss-parser');
 const app = express();
 const PORT = process.env.PORT || 3001;
 const isProd = process.env.NODE_ENV === 'production';
-const DIST_DIR = path.join(__dirname, '../frontend/dist');
+
+function resolveDistDir() {
+  const candidates = [
+    path.join(__dirname, 'public'),
+    path.join(__dirname, '../frontend/dist'),
+    path.join(__dirname, 'dist'),
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, 'index.html'))) return dir;
+  }
+  return null;
+}
+
+const DIST_DIR = resolveDistDir();
 
 if (isProd) app.set('trust proxy', 1);
 
 // ── Database pool ──────────────────────────────────────────────
+// Use 127.0.0.1 in production — "localhost" often resolves to ::1 and MySQL rejects it
+const dbHost = process.env.DB_HOST === 'localhost' && isProd
+  ? '127.0.0.1'
+  : (process.env.DB_HOST || '127.0.0.1');
+
 const pool = mysql.createPool({
-  host:     process.env.DB_HOST     || 'localhost',
+  host:     dbHost,
   user:     process.env.DB_USER     || 'root',
-  password: process.env.DB_PASS     || 'root@123',
+  password: process.env.DB_PASS || process.env.DB_PASSWORD || 'root@123',
   database: process.env.DB_NAME     || 'civilian_db',
   charset:  'utf8mb4',
   waitForConnections: true,
@@ -120,6 +138,21 @@ function parseDashFilters(query) {
     and:   sql ? `AND ${sql}`   : '',
   };
 }
+
+// ── Health check (deployment / DB diagnostics) ───────────────
+app.get('/api/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({
+      success: true,
+      dist: DIST_DIR || null,
+      nodeEnv: process.env.NODE_ENV || 'development',
+    });
+  } catch (e) {
+    console.error('Health check failed:', e.message);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
 
 // ══════════════════════════════════════════════════════════════
 // AUTH ROUTES
@@ -656,24 +689,37 @@ app.get('/api/news/feeds', requireAuth, (req, res) => {
 });
 
 // ── React frontend (production) ────────────────────────────────
-if (fs.existsSync(DIST_DIR)) {
+if (DIST_DIR) {
   app.use(express.static(DIST_DIR));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) return next();
     res.sendFile(path.join(DIST_DIR, 'index.html'));
   });
 } else if (isProd) {
-  console.warn(`Frontend build not found at ${DIST_DIR} — run "npm run build" in frontend/`);
+  console.warn('Frontend build not found — expected backend/public or ../frontend/dist');
 }
 
 // ── Start server ───────────────────────────────────────────────
-initDirectoryTable()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Civilian backend running on port ${PORT} (${isProd ? 'production' : 'development'})`);
-    });
-  })
-  .catch(err => {
-    console.error('Failed to init civil_directory table:', err);
-    process.exit(1);
+async function startServer() {
+  console.log('Starting Civilian backend…');
+  console.log(`NODE_ENV=${process.env.NODE_ENV || '(not set)'}, PORT=${PORT}`);
+  console.log(`DB configured: host=${dbHost}, user=${process.env.DB_USER ? 'yes' : 'MISSING'}, name=${process.env.DB_NAME ? 'yes' : 'MISSING'}`);
+
+  try {
+    await initDirectoryTable();
+    console.log('Database connected, civil_directory table ready');
+  } catch (err) {
+    console.error('Database init failed (server will still start):', err.message);
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Civilian backend running on 0.0.0.0:${PORT} (${isProd ? 'production' : 'development'})`);
+    if (DIST_DIR) console.log(`Serving frontend from ${DIST_DIR}`);
+    else console.warn('No frontend build found');
   });
+}
+
+startServer().catch(err => {
+  console.error('Server failed to start:', err);
+  process.exit(1);
+});

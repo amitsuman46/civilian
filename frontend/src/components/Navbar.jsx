@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -20,6 +20,16 @@ export default function Navbar() {
   const navigate         = useNavigate();
   const location         = useLocation();
   const [open, setOpen]  = useState(false);
+
+  useEffect(() => {
+    const close = () => setOpen(false);
+    window.addEventListener('resize', close);
+    window.visualViewport?.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('resize', close);
+      window.visualViewport?.removeEventListener('resize', close);
+    };
+  }, []);
 
   const initials = (user?.user_name || 'A')
     .split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
@@ -43,7 +53,13 @@ export default function Navbar() {
           <span>Civilian&nbsp;DBMS</span>
         </Link>
 
-        <button className="nav-toggle" id="navToggle" onClick={() => setOpen(o => !o)} aria-label="Toggle menu">
+        <button
+          className="nav-toggle"
+          id="navToggle"
+          onClick={() => setOpen(o => !o)}
+          aria-label="Toggle menu"
+          aria-expanded={open}
+        >
           <span /><span /><span />
         </button>
 
@@ -59,6 +75,15 @@ export default function Navbar() {
               </Link>
             </li>
           ))}
+          <li className="nav-mobile-footer">
+            <div className="nav-mobile-user">
+              <div className="nav-user-avatar">{initials}</div>
+              <span className="nav-mobile-user-name">{user?.user_name}</span>
+            </div>
+            <button type="button" className="btn-logout btn-logout--mobile" onClick={() => { setOpen(false); handleLogout(); }}>
+              <i className="fas fa-power-off"></i> Logout
+            </button>
+          </li>
         </ul>
 
         <div className="nav-user">

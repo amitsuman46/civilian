@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import { useViewportRefresh } from '../hooks/useViewportRefresh';
 
 const PAGE_TITLES = {
   '/dashboard':         'Dashboard',
@@ -25,8 +26,10 @@ export default function Dashboard() {
   const title    = getTitle(location.pathname);
   const isHome   = location.pathname === '/dashboard';
 
+  useViewportRefresh();
+
   return (
-    <div style={{ display:'flex', flexDirection:'column', minHeight:'100vh' }}>
+    <div className="app-shell">
       <Navbar />
 
       {/* Breadcrumb */}
@@ -44,7 +47,7 @@ export default function Dashboard() {
       </div>
 
       {/* Page content */}
-      <main className="main-content" style={{ flex: 1 }}>
+      <main className="main-content">
         <div className="container">
           <Outlet />
         </div>

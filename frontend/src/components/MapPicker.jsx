@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMapEvents } from 'react-leaflet';
+import MapResize from './MapResize';
 import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 
@@ -190,6 +191,7 @@ export default function MapPicker({ lat, lng, polygon, onChange }) {
           }
         }}
       >
+        <MapResize />
         <TileLayer key={tileLayer} url={TILES[tileLayer].url} attribution={TILES[tileLayer].attribution} />
         <ClickHandler onMapClick={handleMapClick} />
         {pin && (

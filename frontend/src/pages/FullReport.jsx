@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap } from 'react-leaflet';
+import MapResize from '../components/MapResize';
 import API from '../api';
 
 function AutoFit({ pin, polygon }) {
@@ -200,6 +201,7 @@ export default function FullReport() {
                   zoomControl={true}
                   dragging={true}
                 >
+                  <MapResize />
                   <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
