@@ -37,7 +37,11 @@ export default function BulkHouse() {
   }, [inputs, showToast]);
 
   const saveAll = async () => {
-    const visible = filtered();
+    const visible = filtered().filter(r => r.can_edit);
+    if (!visible.length) {
+      showToast('No editable records in the current view.', 'error');
+      return;
+    }
     let saved = 0, failed = 0;
     for (const r of visible) {
       const val = inputs[r.id]?.trim() || '';
@@ -127,6 +131,7 @@ export default function BulkHouse() {
                 <tbody>
                   {visible.map((r, idx) => {
                     const isMissing = !r.house_no;
+                    const readOnly = !r.can_edit;
                     return (
                       <tr key={r.id} style={{borderBottom:'1px solid var(--border)', background: isMissing ? 'rgba(220,38,38,.04)' : ''}}>
                         <td style={{padding:'.55rem 1rem', color:'var(--text-muted)', fontSize:'.8rem'}}>{idx + 1}</td>
@@ -142,29 +147,40 @@ export default function BulkHouse() {
                             type="text"
                             value={inputs[r.id] ?? ''}
                             onChange={e => setInputs(prev => ({ ...prev, [r.id]: e.target.value }))}
-                            onKeyDown={e => e.key === 'Enter' && saveRow(r)}
+                            onKeyDown={e => !readOnly && e.key === 'Enter' && saveRow(r)}
                             placeholder="e.g. 01"
                             maxLength={20}
+                            readOnly={readOnly}
+                            title={readOnly ? 'Only the user who added this record can edit it' : undefined}
                             style={{
                               width:'100%', padding:'.35rem .6rem',
                               border: `1.5px solid ${isMissing ? 'var(--danger)' : 'var(--border)'}`,
                               borderRadius:'var(--radius-sm)', fontSize:'.85rem',
-                              background:'var(--bg)', color:'var(--text)', outline:'none',
+                              background: readOnly ? 'var(--surface)' : 'var(--bg)',
+                              color:'var(--text)', outline:'none',
+                              cursor: readOnly ? 'not-allowed' : 'text',
+                              opacity: readOnly ? 0.75 : 1,
                             }}
                           />
                         </td>
                         <td style={{padding:'.45rem .75rem', textAlign:'center'}}>
-                          <button
-                            className="btn btn-primary btn-sm"
-                            onClick={() => saveRow(r)}
-                            disabled={saving[r.id]}
-                            style={{padding:'.3rem .65rem', fontSize:'.78rem'}}
-                          >
-                            {saving[r.id]
-                              ? <span className="spinner" style={{width:'12px', height:'12px'}}></span>
-                              : <i className="fas fa-check"></i>
-                            }
-                          </button>
+                          {readOnly ? (
+                            <span style={{ fontSize:'.72rem', color:'var(--text-muted)' }} title="Read only">
+                              <i className="fas fa-lock"></i>
+                            </span>
+                          ) : (
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() => saveRow(r)}
+                              disabled={saving[r.id]}
+                              style={{padding:'.3rem .65rem', fontSize:'.78rem'}}
+                            >
+                              {saving[r.id]
+                                ? <span className="spinner" style={{width:'12px', height:'12px'}}></span>
+                                : <i className="fas fa-check"></i>
+                              }
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );

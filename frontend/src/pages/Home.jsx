@@ -5,14 +5,14 @@ import MapResize from '../components/MapResize';
 import {
   Chart as ChartJS,
   CategoryScale, LinearScale,
-  PointElement, LineElement, BarElement,
-  Title, Tooltip, Legend, Filler,
+  BarElement,
+  Title, Tooltip, Legend,
 } from 'chart.js';
-import { Line, Bar } from 'react-chartjs-2';
+import { Bar } from 'react-chartjs-2';
 import { useAuth } from '../context/AuthContext';
 import API from '../api';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 const AREAS    = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
 const VILLAGES = [
@@ -35,16 +35,38 @@ const tooltipDefaults = {
 
 function buildQuery(filters) {
   const params = new URLSearchParams();
-  if (filters.area)    params.set('area', filters.area);
-  if (filters.village) params.set('village', filters.village);
+  if (filters.area)      params.set('area', filters.area);
+  if (filters.village)   params.set('village', filters.village);
+  if (filters.formation) params.set('formation', filters.formation);
+  if (filters.unit)      params.set('unit', filters.unit);
   const qs = params.toString();
   return qs ? `?${qs}` : '';
 }
 
-function DashFilters({ filters, onChange, onClear, hasActive, compact }) {
+function DashFilters({ filters, onChange, onClear, hasActive, compact, formations, units }) {
   return (
     <div className={`dash-filters${compact ? ' dash-filters--compact' : ''}`}>
       <div className="dash-filters-fields">
+        <label className="dash-filter-field">
+          <span className="dash-filter-label"><i className="fas fa-sitemap"></i> Formation</span>
+          <select
+            value={filters.formation}
+            onChange={e => onChange({ ...filters, formation: e.target.value })}
+          >
+            <option value="">All Formations</option>
+            {formations.map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
+        </label>
+        <label className="dash-filter-field">
+          <span className="dash-filter-label"><i className="fas fa-people-group"></i> Unit</span>
+          <select
+            value={filters.unit}
+            onChange={e => onChange({ ...filters, unit: e.target.value })}
+          >
+            <option value="">All Units</option>
+            {units.map(u => <option key={u} value={u}>{u}</option>)}
+          </select>
+        </label>
         <label className="dash-filter-field">
           <span className="dash-filter-label"><i className="fas fa-shield-halved"></i> Area / Zone</span>
           <select
@@ -68,6 +90,18 @@ function DashFilters({ filters, onChange, onClear, hasActive, compact }) {
       </div>
       {hasActive && (
         <div className="dash-filters-active">
+          {filters.formation && (
+            <span className="dash-filter-chip">
+              <i className="fas fa-sitemap"></i> {filters.formation}
+              <button type="button" aria-label="Remove formation filter" onClick={() => onChange({ ...filters, formation: '' })}>×</button>
+            </span>
+          )}
+          {filters.unit && (
+            <span className="dash-filter-chip">
+              <i className="fas fa-people-group"></i> {filters.unit}
+              <button type="button" aria-label="Remove unit filter" onClick={() => onChange({ ...filters, unit: '' })}>×</button>
+            </span>
+          )}
           {filters.area && (
             <span className="dash-filter-chip">
               <i className="fas fa-shield-halved"></i> {filters.area}
@@ -94,9 +128,10 @@ export default function Home() {
   const [stats, setStats]         = useState(null);
   const [mapPins, setMapPins]     = useState([]);
   const [loading, setLoading]     = useState(true);
-  const [filters, setFilters]     = useState({ area: '', village: '' });
+  const [filters, setFilters]     = useState({ area: '', village: '', formation: '', unit: '' });
+  const [formations, setFormations] = useState([]);
+  const [units, setUnits]           = useState([]);
   const [stickyVisible, setStickyVisible] = useState(false);
-  const [regChartView, setRegChartView]   = useState('daily');
 
   const filterBarRef = useRef(null);
 
@@ -104,7 +139,16 @@ export default function Home() {
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const dateStr  = new Date().toLocaleDateString('en-GB', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
 
-  const hasActiveFilters = Boolean(filters.area || filters.village);
+  const hasActiveFilters = Boolean(filters.area || filters.village || filters.formation || filters.unit);
+
+  useEffect(() => {
+    API.get('/api/filter-options').then(data => {
+      if (data.success) {
+        setFormations(data.formations || []);
+        setUnits(data.units || []);
+      }
+    });
+  }, []);
 
   const fetchDashboard = useCallback(async (activeFilters) => {
     setLoading(true);
@@ -135,40 +179,12 @@ export default function Home() {
   }, []);
 
   const handleFilterChange = next => setFilters(next);
-  const clearFilters = () => setFilters({ area: '', village: '' });
+  const clearFilters = () => setFilters({ area: '', village: '', formation: '', unit: '' });
 
   const total = stats?.kpi?.total ?? 0;
   const today = stats?.kpi?.today ?? 0;
   const week  = stats?.kpi?.week  ?? 0;
   const month = stats?.kpi?.month ?? 0;
-
-  const dayChartData = {
-    labels: stats?.daily?.map(d => d.label) || [],
-    datasets: [{
-      label: 'Records Added',
-      data: stats?.daily?.map(d => d.count) || [],
-      borderColor: '#1d4ed8',
-      backgroundColor: 'rgba(29,78,216,.08)',
-      borderWidth: 2,
-      fill: true,
-      tension: .4,
-      pointBackgroundColor: '#1d4ed8',
-      pointRadius: 3,
-      pointHoverRadius: 5,
-    }],
-  };
-
-  const monthChartData = {
-    labels: stats?.monthly?.map(d => d.label) || [],
-    datasets: [{
-      label: 'Records Added',
-      data: stats?.monthly?.map(d => d.count) || [],
-      backgroundColor: 'rgba(29,78,216,.75)',
-      hoverBackgroundColor: '#1d4ed8',
-      borderRadius: 6,
-      borderSkipped: false,
-    }],
-  };
 
   const palette = ['#1d4ed8','#0891b2','#059669','#d97706','#7c3aed','#e53935','#0f766e'];
   const areaChartData = {
@@ -196,15 +212,6 @@ export default function Home() {
       borderRadius: 4,
       borderSkipped: false,
     }],
-  };
-
-  const lineOpts = {
-    responsive: true, maintainAspectRatio: true,
-    plugins: { legend: { labels: { font: chartFont, color:'#64748b', boxWidth:10, padding:14 } }, tooltip: tooltipDefaults },
-    scales: {
-      x: { grid:{ color: gridColor }, ticks:{ ...tickConfig, maxTicksLimit: 8 } },
-      y: { grid:{ color: gridColor }, ticks:{ ...tickConfig, stepSize: 1 }, beginAtZero: true },
-    },
   };
 
   const barOpts = {
@@ -235,7 +242,7 @@ export default function Home() {
   };
 
   const filterBadge = hasActiveFilters
-    ? [filters.area, filters.village].filter(Boolean).join(' · ')
+    ? [filters.formation, filters.unit, filters.area, filters.village].filter(Boolean).join(' · ')
     : 'All records';
 
   return (
@@ -248,6 +255,16 @@ export default function Home() {
             <span className="dash-filters-sticky-title">Dashboard Filters</span>
             {hasActiveFilters ? (
               <div className="dash-filters-sticky-chips">
+                {filters.formation && (
+                  <span className="dash-filter-chip dash-filter-chip--sticky">
+                    <i className="fas fa-sitemap"></i> {filters.formation}
+                  </span>
+                )}
+                {filters.unit && (
+                  <span className="dash-filter-chip dash-filter-chip--sticky">
+                    <i className="fas fa-people-group"></i> {filters.unit}
+                  </span>
+                )}
                 {filters.area && (
                   <span className="dash-filter-chip dash-filter-chip--sticky">
                     <i className="fas fa-shield-halved"></i> {filters.area}
@@ -270,6 +287,8 @@ export default function Home() {
               onChange={handleFilterChange}
               onClear={clearFilters}
               hasActive={hasActiveFilters}
+              formations={formations}
+              units={units}
             />
             {hasActiveFilters && (
               <button type="button" className="dash-filter-clear dash-filter-clear--sticky" onClick={clearFilters}>
@@ -319,6 +338,8 @@ export default function Home() {
           onChange={handleFilterChange}
           onClear={clearFilters}
           hasActive={hasActiveFilters}
+          formations={formations}
+          units={units}
         />
       </div>
 
@@ -340,42 +361,7 @@ export default function Home() {
         ))}
       </div>
 
-      {/* Registrations — daily / monthly toggle */}
-      <div className="dash-chart-card dash-reg-chart-card">
-        <div className="dash-chart-header">
-          <div className="dash-chart-title">
-            <i className={`fas ${regChartView === 'daily' ? 'fa-chart-line' : 'fa-chart-bar'}`}></i>
-            Registrations
-            <span className="dash-reg-period" role="group" aria-label="Registration chart period">
-              <button
-                type="button"
-                className={`dash-reg-period-btn${regChartView === 'daily' ? ' is-active' : ''}`}
-                onClick={() => setRegChartView('daily')}
-              >
-                Daily
-              </button>
-              <span className="dash-reg-period-sep" aria-hidden="true">|</span>
-              <button
-                type="button"
-                className={`dash-reg-period-btn${regChartView === 'monthly' ? ' is-active' : ''}`}
-                onClick={() => setRegChartView('monthly')}
-              >
-                Monthly
-              </button>
-            </span>
-          </div>
-          <span className="dash-chart-badge">
-            {regChartView === 'daily' ? 'Last 30 days' : 'Last 6 months'}
-          </span>
-        </div>
-        {stats && (
-          regChartView === 'daily'
-            ? <Line key="daily" data={dayChartData} options={lineOpts} />
-            : <Bar key="monthly" data={monthChartData} options={barOpts} />
-        )}
-      </div>
-
-      {/* Charts Row 2 */}
+      {/* Charts Row */}
       <div className="dash-charts-row two">
         <div className="dash-chart-card">
           <div className="dash-chart-header">

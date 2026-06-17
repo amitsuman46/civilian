@@ -33,6 +33,7 @@ export default function EditRecord() {
   const [errors, setErrors] = useState({});
   const [busy, setBusy]     = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
 
   const photoRef = useRef(null);
   const docRef   = useRef(null);
@@ -40,6 +41,7 @@ export default function EditRecord() {
   useEffect(() => {
     API.get(`/api/civilians/${id}`).then(data => {
       if (!data.success) { setNotFound(true); return; }
+      if (!data.record.can_edit) { setForbidden(true); return; }
       const r = data.record;
       setRec(r);
       setForm({
@@ -113,6 +115,12 @@ export default function EditRecord() {
   const ErrMsg = ({ field }) => errors[field]
     ? <span className="field-error">{errors[field]}</span> : null;
 
+  if (forbidden) return (
+    <div className="alert alert-warning">
+      <i className="fas fa-lock"></i> You can only edit records you created.{' '}
+      <Link to="/dashboard/update">Back to Update / Delete</Link>
+    </div>
+  );
   if (notFound) return <div className="alert alert-danger"><i className="fas fa-triangle-exclamation"></i> Record not found.</div>;
   if (!rec) return <div style={{padding:'3rem', textAlign:'center'}}><div className="loading-spinner" style={{margin:'0 auto'}}></div></div>;
 

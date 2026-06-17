@@ -115,6 +115,27 @@ function parseFamily(raw) {
   try { return JSON.stringify(JSON.parse(raw)); } catch { return '[]'; }
 }
 
+function canEditRecord(record, userId) {
+  return Boolean(record?.created_by && userId && record.created_by === userId);
+}
+
+function withEditFlag(record, userId) {
+  return { ...record, can_edit: canEditRecord(record, userId) };
+}
+
+function withEditFlags(records, userId) {
+  return records.map(r => withEditFlag(r, userId));
+}
+
+function denyUnlessOwner(record, userId, res) {
+  if (canEditRecord(record, userId)) return true;
+  res.status(403).json({
+    success: false,
+    message: 'You can only modify records you created.',
+  });
+  return false;
+}
+
 const DEFINED_AREAS = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
 const DEFINED_VILLAGES = [
   'Gagariyan','Barmiya and Doba','Upper Gagariyan','Wazli','kainth',
@@ -124,15 +145,21 @@ const DEFINED_VILLAGES = [
 ];
 
 function parseDashFilters(query) {
-  const area    = DEFINED_AREAS.includes(query.area)       ? query.area    : null;
-  const village = DEFINED_VILLAGES.includes(query.village) ? query.village : null;
+  const area      = DEFINED_AREAS.includes(query.area)       ? query.area      : null;
+  const village   = DEFINED_VILLAGES.includes(query.village) ? query.village : null;
+  const formation = typeof query.formation === 'string' && query.formation.trim()
+    ? query.formation.trim() : null;
+  const unit      = typeof query.unit === 'string' && query.unit.trim()
+    ? query.unit.trim() : null;
   const parts   = [];
   const params  = [];
-  if (area)    { parts.push('area = ?');    params.push(area); }
-  if (village) { parts.push('village = ?'); params.push(village); }
+  if (area)      { parts.push('area = ?');      params.push(area); }
+  if (village)   { parts.push('village = ?');   params.push(village); }
+  if (formation) { parts.push('formation = ?'); params.push(formation); }
+  if (unit)      { parts.push('unit = ?');      params.push(unit); }
   const sql = parts.join(' AND ');
   return {
-    area, village,
+    area, village, formation, unit,
     params,
     where: sql ? `WHERE ${sql}` : '',
     and:   sql ? `AND ${sql}`   : '',
@@ -164,14 +191,25 @@ app.post('/api/login', async (req, res) => {
     return res.json({ success: false, message: 'Please enter both User ID and Password.' });
   try {
     const [rows] = await pool.query(
-      'SELECT id, user_id, full_name FROM users WHERE user_id = ? AND password = ? LIMIT 1',
+      'SELECT id, user_id, full_name, formation, unit FROM users WHERE user_id = ? AND password = ? LIMIT 1',
       [user_id, password]
     );
     if (!rows.length)
       return res.json({ success: false, message: 'Invalid credentials. Please check your User ID and Password.' });
-    req.session.userId   = rows[0].user_id;
-    req.session.userName = rows[0].full_name;
-    res.json({ success: true, user: { user_id: rows[0].user_id, user_name: rows[0].full_name } });
+    const row = rows[0];
+    req.session.userId      = row.user_id;
+    req.session.userName    = row.full_name;
+    req.session.formation   = row.formation || null;
+    req.session.unit        = row.unit || row.user_id;
+    res.json({
+      success: true,
+      user: {
+        user_id: row.user_id,
+        user_name: row.full_name,
+        formation: row.formation || '',
+        unit: row.unit || row.user_id,
+      },
+    });
   } catch (e) {
     console.error(e);
     res.json({ success: false, message: 'Database connection error.' });
@@ -184,12 +222,49 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/api/me', (req, res) => {
   if (!req.session.userId) return res.json({ success: false });
-  res.json({ success: true, user: { user_id: req.session.userId, user_name: req.session.userName } });
+  res.json({
+    success: true,
+    user: {
+      user_id: req.session.userId,
+      user_name: req.session.userName,
+      formation: req.session.formation || '',
+      unit: req.session.unit || req.session.userId,
+    },
+  });
 });
 
 // ══════════════════════════════════════════════════════════════
 // STATS
 // ══════════════════════════════════════════════════════════════
+
+app.get('/api/filter-options', requireAuth, async (_req, res) => {
+  try {
+    const [formRows] = await pool.query(`
+      SELECT DISTINCT formation AS val FROM civilians
+      WHERE formation IS NOT NULL AND formation != ''
+      UNION
+      SELECT DISTINCT formation AS val FROM users
+      WHERE formation IS NOT NULL AND formation != ''
+      ORDER BY val
+    `);
+    const [unitRows] = await pool.query(`
+      SELECT DISTINCT unit AS val FROM civilians
+      WHERE unit IS NOT NULL AND unit != ''
+      UNION
+      SELECT DISTINCT unit AS val FROM users
+      WHERE unit IS NOT NULL AND unit != ''
+      ORDER BY val
+    `);
+    res.json({
+      success: true,
+      formations: formRows.map(r => r.val),
+      units: unitRows.map(r => r.val),
+    });
+  } catch (e) {
+    console.error(e);
+    res.json({ success: false, message: 'Filter options error' });
+  }
+});
 
 app.get('/api/stats', requireAuth, async (req, res) => {
   try {
@@ -262,7 +337,7 @@ app.get('/api/stats', requireAuth, async (req, res) => {
 
     res.json({
       success: true,
-      filters: { area: f.area, village: f.village },
+      filters: { area: f.area, village: f.village, formation: f.formation, unit: f.unit },
       kpi: { total: Number(kpi.total), today: Number(kpi.today), week: Number(kpi.week), month: Number(kpi.month) },
       daily, monthly, area, village,
     });
@@ -280,7 +355,7 @@ app.get('/api/stats', requireAuth, async (req, res) => {
 app.get('/api/civilians', requireAuth, async (req, res) => {
   try {
     const [records] = await pool.query('SELECT * FROM civilians ORDER BY created_at DESC');
-    res.json({ success: true, records });
+    res.json({ success: true, records: withEditFlags(records, req.session.userId) });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'DB error' });
   }
@@ -295,7 +370,7 @@ app.get('/api/civilians/map-pins', requireAuth, async (req, res) => {
        WHERE lat IS NOT NULL AND lng IS NOT NULL ${f.and}`,
       f.params
     );
-    res.json({ success: true, pins, filters: { area: f.area, village: f.village } });
+    res.json({ success: true, pins, filters: { area: f.area, village: f.village, formation: f.formation, unit: f.unit } });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'DB error' });
   }
@@ -306,7 +381,7 @@ app.get('/api/civilians/:id', requireAuth, async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM civilians WHERE id = ? LIMIT 1', [req.params.id]);
     if (!rows.length) return res.json({ success: false, message: 'Record not found.' });
-    res.json({ success: true, record: rows[0] });
+    res.json({ success: true, record: withEditFlag(rows[0], req.session.userId) });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'DB error' });
   }
@@ -342,21 +417,26 @@ app.post('/api/civilians', requireAuth,
       const lat         = b.lat  ? parseFloat(b.lat)  : null;
       const lng         = b.lng  ? parseFloat(b.lng)  : null;
       const polygon     = b.polygon || null;
+      const formation   = req.session.formation || null;
+      const unit        = req.session.unit || req.session.userId || null;
+      const created_by  = req.session.userId || null;
 
       const [result] = await pool.query(`
         INSERT INTO civilians
           (house_no,name,mobile,community,religion,occupation,
            immovable_property,movable_property,salary,income,expenditure,
-           health_status,area,village,lat,lng,polygon,family_details,photo_path,document_path)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+           health_status,area,village,formation,unit,lat,lng,polygon,family_details,photo_path,document_path,created_by)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
         house_no || null, name, mobile,
         b.community || null, b.religion || null, b.occupation || null,
         b.immovable_property || null, b.movable_property || null,
         salary, income, expenditure,
         b.health_status || null, b.area || null, b.village || null,
+        formation, unit,
         lat, lng, polygon,
         parseFamily(b.family_details), photo_path || null, document_path || null,
+        created_by,
       ]);
 
       res.json({ success: true, message: 'Record saved successfully!', id: result.insertId });
@@ -375,6 +455,7 @@ app.put('/api/civilians/:id', requireAuth,
       const [existing] = await pool.query('SELECT * FROM civilians WHERE id = ? LIMIT 1', [id]);
       if (!existing.length) return res.json({ success: false, message: 'Record not found.' });
       const rec = existing[0];
+      if (!denyUnlessOwner(rec, req.session.userId, res)) return;
 
       const b = req.body;
       const name   = (b.name   || '').trim();
@@ -437,8 +518,9 @@ app.put('/api/civilians/:id', requireAuth,
 app.delete('/api/civilians/:id', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const [rows] = await pool.query('SELECT photo_path, document_path FROM civilians WHERE id = ? LIMIT 1', [id]);
+    const [rows] = await pool.query('SELECT photo_path, document_path, created_by FROM civilians WHERE id = ? LIMIT 1', [id]);
     if (!rows.length) return res.json({ success: false, message: 'Record not found.' });
+    if (!denyUnlessOwner(rows[0], req.session.userId, res)) return;
     await pool.query('DELETE FROM civilians WHERE id = ?', [id]);
     deleteFile(rows[0].photo_path);
     deleteFile(rows[0].document_path);
@@ -453,8 +535,9 @@ app.patch('/api/civilians/:id/house-no', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const house_no = (req.body.house_no || '').trim() || null;
-    const [rows] = await pool.query('SELECT id FROM civilians WHERE id = ? LIMIT 1', [id]);
+    const [rows] = await pool.query('SELECT id, created_by FROM civilians WHERE id = ? LIMIT 1', [id]);
     if (!rows.length) return res.json({ success: false, message: 'Record not found.' });
+    if (!denyUnlessOwner(rows[0], req.session.userId, res)) return;
     await pool.query('UPDATE civilians SET house_no = ? WHERE id = ?', [house_no, id]);
     res.json({ success: true, message: 'House number updated.' });
   } catch (e) {
@@ -465,6 +548,23 @@ app.patch('/api/civilians/:id/house-no', requireAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // CIVIL DIRECTORY (separate from civilians registry)
 // ══════════════════════════════════════════════════════════════
+
+async function initCiviliansSchema() {
+  const [cols] = await pool.query(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'civilians'`
+  );
+  const names = new Set(cols.map(c => c.COLUMN_NAME));
+  if (!names.has('created_by')) {
+    await pool.query('ALTER TABLE civilians ADD COLUMN created_by VARCHAR(64) DEFAULT NULL');
+    console.log('Added civilians.created_by column');
+    const [r] = await pool.query(
+      `UPDATE civilians SET created_by = unit
+       WHERE (created_by IS NULL OR created_by = '') AND unit IS NOT NULL AND unit != ''`
+    );
+    if (r.affectedRows) console.log(`Backfilled created_by on ${r.affectedRows} existing record(s)`);
+  }
+}
 
 async function initDirectoryTable() {
   await pool.query(`
@@ -607,7 +707,7 @@ app.get('/api/search', requireAuth, async (req, res) => {
         ORDER BY created_at DESC
       `, Array(14).fill(like));
     }
-    res.json({ success: true, records, mode });
+    res.json({ success: true, records: withEditFlags(records, req.session.userId), mode });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'Search error' });
   }
@@ -620,9 +720,9 @@ app.get('/api/search', requireAuth, async (req, res) => {
 app.get('/api/house-list', requireAuth, async (req, res) => {
   try {
     const [records] = await pool.query(
-      'SELECT id, house_no, name, mobile, village, area FROM civilians ORDER BY CAST(house_no AS UNSIGNED) ASC, name ASC'
+      'SELECT id, house_no, name, mobile, village, area, created_by FROM civilians ORDER BY CAST(house_no AS UNSIGNED) ASC, name ASC'
     );
-    res.json({ success: true, records });
+    res.json({ success: true, records: withEditFlags(records, req.session.userId) });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'DB error' });
   }
@@ -706,8 +806,9 @@ async function startServer() {
   console.log(`DB configured: host=${dbHost}, user=${process.env.DB_USER ? 'yes' : 'MISSING'}, name=${process.env.DB_NAME ? 'yes' : 'MISSING'}`);
 
   try {
+    await initCiviliansSchema();
     await initDirectoryTable();
-    console.log('Database connected, civil_directory table ready');
+    console.log('Database connected, schema ready');
   } catch (err) {
     console.error('Database init failed (server will still start):', err.message);
   }

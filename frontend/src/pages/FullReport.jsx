@@ -87,7 +87,9 @@ export default function FullReport() {
         </div>
         <div className="page-actions">
           <Link to="/dashboard/view" className="btn btn-secondary btn-sm"><i className="fas fa-arrow-left"></i> Back</Link>
-          <Link to={`/dashboard/edit/${rec.id}`} className="btn btn-primary btn-sm"><i className="fas fa-pen"></i> Edit</Link>
+          {rec.can_edit && (
+            <Link to={`/dashboard/edit/${rec.id}`} className="btn btn-primary btn-sm"><i className="fas fa-pen"></i> Edit</Link>
+          )}
           <button onClick={() => window.print()} className="btn btn-outline-primary btn-sm"><i className="fas fa-print"></i> Print</button>
         </div>
       </div>
