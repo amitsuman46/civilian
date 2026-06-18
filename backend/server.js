@@ -43,9 +43,36 @@ const pool = mysql.createPool({
   connectionLimit: 10,
 });
 
-// ── Uploads dir ────────────────────────────────────────────────
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+// ── Uploads (production: folder OUTSIDE deploy zip — Hostinger wipes app dir on redeploy) ──
+const LEGACY_UPLOADS_DIR = path.join(__dirname, 'uploads');
+const PERSISTENT_UPLOADS_DIR = path.resolve(__dirname, '../civilian-uploads');
+
+const UPLOADS_DIR = process.env.UPLOADS_DIR
+  ? path.resolve(process.env.UPLOADS_DIR)
+  : isProd
+    ? PERSISTENT_UPLOADS_DIR
+    : LEGACY_UPLOADS_DIR;
+
+function initUploadsStorage() {
+  if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+  if (UPLOADS_DIR === LEGACY_UPLOADS_DIR || !fs.existsSync(LEGACY_UPLOADS_DIR)) return;
+
+  let migrated = 0;
+  for (const name of fs.readdirSync(LEGACY_UPLOADS_DIR)) {
+    if (name.startsWith('.')) continue;
+    const src = path.join(LEGACY_UPLOADS_DIR, name);
+    if (!fs.statSync(src).isFile()) continue;
+    const dest = path.join(UPLOADS_DIR, name);
+    if (!fs.existsSync(dest)) {
+      fs.copyFileSync(src, dest);
+      migrated++;
+    }
+  }
+  if (migrated) console.log(`Migrated ${migrated} upload(s) from legacy uploads/ → ${UPLOADS_DIR}`);
+}
+
+initUploadsStorage();
 
 // ── Middleware ─────────────────────────────────────────────────
 if (!isProd) {
@@ -815,6 +842,7 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Civilian backend running on 0.0.0.0:${PORT} (${isProd ? 'production' : 'development'})`);
+    console.log(`Uploads directory: ${UPLOADS_DIR}`);
     if (DIST_DIR) console.log(`Serving frontend from ${DIST_DIR}`);
     else console.warn('No frontend build found');
   });
