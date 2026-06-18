@@ -12,6 +12,10 @@ import { Bar } from 'react-chartjs-2';
 import { useAuth } from '../context/AuthContext';
 import API from '../api';
 
+/** Default map viewport — northern India / Jammu & Kashmir (pan & zoom unrestricted) */
+const MAP_DEFAULT_CENTER = [33.0, 75.5];
+const MAP_DEFAULT_ZOOM   = 6;
+
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 const AREAS    = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
@@ -73,7 +77,7 @@ function DashFilters({ filters, onChange, onClear, hasActive, compact, formation
             value={filters.area}
             onChange={e => onChange({ ...filters, area: e.target.value })}
           >
-            <option value="">All Companies</option>
+            <option value="">All Area</option>
             {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
         </label>
@@ -397,10 +401,10 @@ export default function Home() {
           </div>
         ) : (
           <MapContainer
-            center={[20.5937, 78.9629]}
-            zoom={5}
+            center={MAP_DEFAULT_CENTER}
+            zoom={MAP_DEFAULT_ZOOM}
             style={{ height: '380px', width: '100%', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)' }}
-            scrollWheelZoom={false}
+            scrollWheelZoom={true}
           >
             <MapResize />
             <TileLayer

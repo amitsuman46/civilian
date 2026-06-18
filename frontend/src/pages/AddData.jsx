@@ -7,16 +7,14 @@ import { useToast }   from '../context/ToastContext';
 import { useAuth }    from '../context/AuthContext';
 import API from '../api';
 
-const HEALTH_OPTIONS = ['Excellent','Good','Fair','Poor','Critical'];
 const OCCUPATIONS    = ['Farmer','Teacher','Engineer','Doctor','Businessman','Driver','Tailor','Nurse','Homemaker','Labourer','Government Employee','Self-Employed','Student','Retired','Other'];
 const AREAS          = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
-const VILLAGES       = ['Gagariyan','Barmiya and Doba','Upper Gagariyan','Wazli','kainth','Sawjiya(Maidan)','Sawjiya','Sawjian(Mir Muhallah)','Sawjian(Bandi Muhallah)','Sawjian(Ladhi Muhallah)','Sawjian(Purya Muhallah)','Sawjian(Tantary Muhallah)','Sawjian(Gantar)','Sawjian(Sundri)'];
-const COMMUNITIES    = ['Kashmiri','Hindu','Muslim','Sikh','Christian','Buddhist','Jain','Other'];
+const COMMUNITIES    = ['Dogras','Gujjars','Bakarwals','Paharis','Others'];
 const RELIGIONS      = ['Islam','Hinduism','Sikhism','Christianity','Buddhism','Jainism','Other'];
 
 const EMPTY = {
   house_no:'', name:'', mobile:'', village:'', area:'', occupation:'',
-  community:'', religion:'', health_status:'',
+  community:'', religion:'',
   immovable_property:'', movable_property:'', income:'', expenditure:'', salary:'',
   formation:'', unit:'',
 };
@@ -204,13 +202,21 @@ export default function AddData() {
           <div className="form-card-header"><i className="fas fa-map-marker-alt"></i> Location &amp; Personal Details</div>
           <div className="form-card-body">
             <div className="form-grid three">
+              <div className="form-group">
+                <label>Village / Town</label>
+                <input
+                  type="text"
+                  value={form.village}
+                  onChange={e => set('village', e.target.value)}
+                  placeholder="e.g. Sawjian"
+                  maxLength={100}
+                />
+              </div>
               {[
-                { label:'Village / Town', field:'village', opts: VILLAGES },
                 { label:'Area / Zone',    field:'area',    opts: AREAS },
                 { label:'Occupation',     field:'occupation', opts: OCCUPATIONS },
                 { label:'Community',      field:'community',  opts: COMMUNITIES },
                 { label:'Religion',       field:'religion',   opts: RELIGIONS },
-                { label:'Health Status',  field:'health_status', opts: HEALTH_OPTIONS },
               ].map(({ label, field, opts }) => (
                 <div className="form-group" key={field}>
                   <label>{label}</label>

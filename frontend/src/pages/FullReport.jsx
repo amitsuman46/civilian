@@ -32,12 +32,6 @@ function fmt(str) {
 }
 function fmtMoney(v) { return v && parseFloat(v) > 0 ? '₹' + parseFloat(v).toLocaleString('en-IN', { minimumFractionDigits:2 }) : 'N/A'; }
 
-const HEALTH_COLOR = {
-  'Excellent': 'var(--success)', 'Good': 'var(--success)',
-  'Fair':      'var(--warning)',
-  'Poor':      'var(--danger)',  'Critical': 'var(--danger)',
-};
-
 export default function FullReport() {
   const { id } = useParams();
   const [rec, setRec]   = useState(null);
@@ -177,12 +171,6 @@ export default function FullReport() {
                     <div className="detail-value">{val || 'N/A'}</div>
                   </div>
                 ))}
-                <div className="detail-item">
-                  <div className="detail-label"><i className="fas fa-heart-pulse"></i> Health Status</div>
-                  <div className="detail-value" style={{color: HEALTH_COLOR[rec.health_status] || 'var(--text)', fontWeight:700}}>
-                    {rec.health_status || 'N/A'}
-                  </div>
-                </div>
               </div>
             </div>
           </div>
