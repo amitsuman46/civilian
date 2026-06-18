@@ -33,7 +33,6 @@ function CivilianCard({ r }) {
       <hr className="cc-divider" />
       <div className="cc-tags">
         {r.occupation   && <span className="cc-tag occupation"><i className="fas fa-briefcase"></i>{r.occupation}</span>}
-        {r.health_status && <span className="cc-tag health"><i className="fas fa-heart-pulse"></i>{r.health_status}</span>}
         {r.salary > 0   && <span className="cc-tag salary"><i className="fas fa-indian-rupee-sign"></i>{parseFloat(r.salary).toLocaleString()}/mo</span>}
         {r.document_path && <span className="cc-tag area"><i className="fas fa-paperclip"></i>Doc attached</span>}
       </div>

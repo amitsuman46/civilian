@@ -9,31 +9,87 @@ const RSSParser = require('rss-parser');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const isProd = process.env.NODE_ENV === 'production';
+
+function resolveDistDir() {
+  const candidates = [
+    path.join(__dirname, 'public'),
+    path.join(__dirname, '../frontend/dist'),
+    path.join(__dirname, 'dist'),
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, 'index.html'))) return dir;
+  }
+  return null;
+}
+
+const DIST_DIR = resolveDistDir();
+
+if (isProd) app.set('trust proxy', 1);
 
 // ── Database pool ──────────────────────────────────────────────
+// Use 127.0.0.1 in production — "localhost" often resolves to ::1 and MySQL rejects it
+const dbHost = process.env.DB_HOST === 'localhost' && isProd
+  ? '127.0.0.1'
+  : (process.env.DB_HOST || '127.0.0.1');
+
 const pool = mysql.createPool({
-  host:     process.env.DB_HOST     || 'localhost',
+  host:     dbHost,
   user:     process.env.DB_USER     || 'root',
-  password: process.env.DB_PASS     || 'root@123',
+  password: process.env.DB_PASS || process.env.DB_PASSWORD || 'root@123',
   database: process.env.DB_NAME     || 'civilian_db',
   charset:  'utf8mb4',
   waitForConnections: true,
   connectionLimit: 10,
 });
 
-// ── Uploads dir ────────────────────────────────────────────────
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+// ── Uploads (production: folder OUTSIDE deploy zip — Hostinger wipes app dir on redeploy) ──
+const LEGACY_UPLOADS_DIR = path.join(__dirname, 'uploads');
+const PERSISTENT_UPLOADS_DIR = path.resolve(__dirname, '../civilian-uploads');
+
+const UPLOADS_DIR = process.env.UPLOADS_DIR
+  ? path.resolve(process.env.UPLOADS_DIR)
+  : isProd
+    ? PERSISTENT_UPLOADS_DIR
+    : LEGACY_UPLOADS_DIR;
+
+function initUploadsStorage() {
+  if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+  if (UPLOADS_DIR === LEGACY_UPLOADS_DIR || !fs.existsSync(LEGACY_UPLOADS_DIR)) return;
+
+  let migrated = 0;
+  for (const name of fs.readdirSync(LEGACY_UPLOADS_DIR)) {
+    if (name.startsWith('.')) continue;
+    const src = path.join(LEGACY_UPLOADS_DIR, name);
+    if (!fs.statSync(src).isFile()) continue;
+    const dest = path.join(UPLOADS_DIR, name);
+    if (!fs.existsSync(dest)) {
+      fs.copyFileSync(src, dest);
+      migrated++;
+    }
+  }
+  if (migrated) console.log(`Migrated ${migrated} upload(s) from legacy uploads/ → ${UPLOADS_DIR}`);
+}
+
+initUploadsStorage();
 
 // ── Middleware ─────────────────────────────────────────────────
-app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:3000'], credentials: true }));
+if (!isProd) {
+  app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:3000'], credentials: true }));
+}
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(session({
-  secret: 'civilian-dbms-secret-2025',
+  secret: process.env.SESSION_SECRET || 'civilian-dbms-secret-2025',
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, maxAge: 24 * 60 * 60 * 1000 },
+  cookie: {
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000,
+    secure: isProd,
+    sameSite: 'lax',
+  },
 }));
 app.use('/uploads', express.static(UPLOADS_DIR));
 
@@ -86,13 +142,71 @@ function parseFamily(raw) {
   try { return JSON.stringify(JSON.parse(raw)); } catch { return '[]'; }
 }
 
-const DEFINED_AREAS = ['A Coy','B Coy','C Coy','D Coy','E Coy','F Coy','HQ Coy'];
+function canEditRecord(record, userId) {
+  return Boolean(record?.created_by && userId && record.created_by === userId);
+}
+
+function withEditFlag(record, userId) {
+  return { ...record, can_edit: canEditRecord(record, userId) };
+}
+
+function withEditFlags(records, userId) {
+  return records.map(r => withEditFlag(r, userId));
+}
+
+function denyUnlessOwner(record, userId, res) {
+  if (canEditRecord(record, userId)) return true;
+  res.status(403).json({
+    success: false,
+    message: 'You can only modify records you created.',
+  });
+  return false;
+}
+
+const DEFINED_AREAS = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
 const DEFINED_VILLAGES = [
   'Gagariyan','Barmiya and Doba','Upper Gagariyan','Wazli','kainth',
   'Sawjiya(Maidan)','Sawjiya','Sawjian(Mir Muhallah)','Sawjian(Bandi Muhallah)',
   'Sawjian(Ladhi Muhallah)','Sawjian(Purya Muhallah)','Sawjian(Tantary Muhallah)',
   'Sawjian(Gantar)','Sawjian(Sundri)',
 ];
+
+function parseDashFilters(query) {
+  const area      = DEFINED_AREAS.includes(query.area)       ? query.area      : null;
+  const village   = DEFINED_VILLAGES.includes(query.village) ? query.village : null;
+  const formation = typeof query.formation === 'string' && query.formation.trim()
+    ? query.formation.trim() : null;
+  const unit      = typeof query.unit === 'string' && query.unit.trim()
+    ? query.unit.trim() : null;
+  const parts   = [];
+  const params  = [];
+  if (area)      { parts.push('area = ?');      params.push(area); }
+  if (village)   { parts.push('village = ?');   params.push(village); }
+  if (formation) { parts.push('formation = ?'); params.push(formation); }
+  if (unit)      { parts.push('unit = ?');      params.push(unit); }
+  const sql = parts.join(' AND ');
+  return {
+    area, village, formation, unit,
+    params,
+    where: sql ? `WHERE ${sql}` : '',
+    and:   sql ? `AND ${sql}`   : '',
+  };
+}
+
+// ── Health check (deployment / DB diagnostics) ───────────────
+app.get('/api/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({
+      success: true,
+      dist: DIST_DIR || null,
+      nodeEnv: process.env.NODE_ENV || 'development',
+    });
+  } catch (e) {
+    console.error('Health check failed:', e.message);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
 
 // ══════════════════════════════════════════════════════════════
 // AUTH ROUTES
@@ -104,14 +218,25 @@ app.post('/api/login', async (req, res) => {
     return res.json({ success: false, message: 'Please enter both User ID and Password.' });
   try {
     const [rows] = await pool.query(
-      'SELECT id, user_id, full_name FROM users WHERE user_id = ? AND password = ? LIMIT 1',
+      'SELECT id, user_id, full_name, formation, unit FROM users WHERE user_id = ? AND password = ? LIMIT 1',
       [user_id, password]
     );
     if (!rows.length)
       return res.json({ success: false, message: 'Invalid credentials. Please check your User ID and Password.' });
-    req.session.userId   = rows[0].user_id;
-    req.session.userName = rows[0].full_name;
-    res.json({ success: true, user: { user_id: rows[0].user_id, user_name: rows[0].full_name } });
+    const row = rows[0];
+    req.session.userId      = row.user_id;
+    req.session.userName    = row.full_name;
+    req.session.formation   = row.formation || null;
+    req.session.unit        = row.unit || row.user_id;
+    res.json({
+      success: true,
+      user: {
+        user_id: row.user_id,
+        user_name: row.full_name,
+        formation: row.formation || '',
+        unit: row.unit || row.user_id,
+      },
+    });
   } catch (e) {
     console.error(e);
     res.json({ success: false, message: 'Database connection error.' });
@@ -124,15 +249,54 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/api/me', (req, res) => {
   if (!req.session.userId) return res.json({ success: false });
-  res.json({ success: true, user: { user_id: req.session.userId, user_name: req.session.userName } });
+  res.json({
+    success: true,
+    user: {
+      user_id: req.session.userId,
+      user_name: req.session.userName,
+      formation: req.session.formation || '',
+      unit: req.session.unit || req.session.userId,
+    },
+  });
 });
 
 // ══════════════════════════════════════════════════════════════
 // STATS
 // ══════════════════════════════════════════════════════════════
 
+app.get('/api/filter-options', requireAuth, async (_req, res) => {
+  try {
+    const [formRows] = await pool.query(`
+      SELECT DISTINCT formation AS val FROM civilians
+      WHERE formation IS NOT NULL AND formation != ''
+      UNION
+      SELECT DISTINCT formation AS val FROM users
+      WHERE formation IS NOT NULL AND formation != ''
+      ORDER BY val
+    `);
+    const [unitRows] = await pool.query(`
+      SELECT DISTINCT unit AS val FROM civilians
+      WHERE unit IS NOT NULL AND unit != ''
+      UNION
+      SELECT DISTINCT unit AS val FROM users
+      WHERE unit IS NOT NULL AND unit != ''
+      ORDER BY val
+    `);
+    res.json({
+      success: true,
+      formations: formRows.map(r => r.val),
+      units: unitRows.map(r => r.val),
+    });
+  } catch (e) {
+    console.error(e);
+    res.json({ success: false, message: 'Filter options error' });
+  }
+});
+
 app.get('/api/stats', requireAuth, async (req, res) => {
   try {
+    const f = parseDashFilters(req.query);
+
     // KPI counts
     const [[kpi]] = await pool.query(`
       SELECT
@@ -141,15 +305,17 @@ app.get('/api/stats', requireAuth, async (req, res) => {
         SUM(created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS week,
         SUM(YEAR(created_at)=YEAR(NOW()) AND MONTH(created_at)=MONTH(NOW())) AS month
       FROM civilians
-    `);
+      ${f.where}
+    `, f.params);
 
     // Daily (last 30 days)
     const [rawDaily] = await pool.query(`
       SELECT DATE(created_at) AS dt, COUNT(*) AS cnt
       FROM civilians
       WHERE created_at >= CURDATE() - INTERVAL 29 DAY
+      ${f.and}
       GROUP BY DATE(created_at)
-    `);
+    `, f.params);
     const dailyMap = Object.fromEntries(rawDaily.map(r => [r.dt.toISOString().slice(0,10), Number(r.cnt)]));
     const daily = [];
     for (let i = 29; i >= 0; i--) {
@@ -164,8 +330,9 @@ app.get('/api/stats', requireAuth, async (req, res) => {
       SELECT DATE_FORMAT(created_at,'%Y-%m') AS ym, COUNT(*) AS cnt
       FROM civilians
       WHERE created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+      ${f.and}
       GROUP BY ym ORDER BY ym
-    `);
+    `, f.params);
     const monthMap = Object.fromEntries(rawMonthly.map(r => [r.ym, Number(r.cnt)]));
     const monthly = [];
     for (let i = 5; i >= 0; i--) {
@@ -178,21 +345,26 @@ app.get('/api/stats', requireAuth, async (req, res) => {
     // Area-wise
     const [rawArea] = await pool.query(`
       SELECT area, COUNT(*) AS cnt FROM civilians
-      WHERE area IS NOT NULL AND area != '' GROUP BY area
-    `);
+      WHERE area IS NOT NULL AND area != ''
+      ${f.and}
+      GROUP BY area
+    `, f.params);
     const areaMap = Object.fromEntries(rawArea.map(r => [r.area, Number(r.cnt)]));
     const area = DEFINED_AREAS.map(a => ({ label: a, count: areaMap[a] || 0 }));
 
     // Village-wise
     const [rawVillage] = await pool.query(`
       SELECT village, COUNT(*) AS cnt FROM civilians
-      WHERE village IS NOT NULL AND village != '' GROUP BY village
-    `);
+      WHERE village IS NOT NULL AND village != ''
+      ${f.and}
+      GROUP BY village
+    `, f.params);
     const villageMap = Object.fromEntries(rawVillage.map(r => [r.village, Number(r.cnt)]));
     const village = DEFINED_VILLAGES.map(v => ({ label: v, count: villageMap[v] || 0 }));
 
     res.json({
       success: true,
+      filters: { area: f.area, village: f.village, formation: f.formation, unit: f.unit },
       kpi: { total: Number(kpi.total), today: Number(kpi.today), week: Number(kpi.week), month: Number(kpi.month) },
       daily, monthly, area, village,
     });
@@ -210,7 +382,7 @@ app.get('/api/stats', requireAuth, async (req, res) => {
 app.get('/api/civilians', requireAuth, async (req, res) => {
   try {
     const [records] = await pool.query('SELECT * FROM civilians ORDER BY created_at DESC');
-    res.json({ success: true, records });
+    res.json({ success: true, records: withEditFlags(records, req.session.userId) });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'DB error' });
   }
@@ -219,10 +391,13 @@ app.get('/api/civilians', requireAuth, async (req, res) => {
 // GET map pins (must be before /:id to avoid route conflict)
 app.get('/api/civilians/map-pins', requireAuth, async (req, res) => {
   try {
+    const f = parseDashFilters(req.query);
     const [pins] = await pool.query(
-      'SELECT id, name, house_no, area, lat, lng FROM civilians WHERE lat IS NOT NULL AND lng IS NOT NULL'
+      `SELECT id, name, house_no, area, lat, lng FROM civilians
+       WHERE lat IS NOT NULL AND lng IS NOT NULL ${f.and}`,
+      f.params
     );
-    res.json({ success: true, pins });
+    res.json({ success: true, pins, filters: { area: f.area, village: f.village, formation: f.formation, unit: f.unit } });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'DB error' });
   }
@@ -233,7 +408,7 @@ app.get('/api/civilians/:id', requireAuth, async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM civilians WHERE id = ? LIMIT 1', [req.params.id]);
     if (!rows.length) return res.json({ success: false, message: 'Record not found.' });
-    res.json({ success: true, record: rows[0] });
+    res.json({ success: true, record: withEditFlag(rows[0], req.session.userId) });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'DB error' });
   }
@@ -269,21 +444,26 @@ app.post('/api/civilians', requireAuth,
       const lat         = b.lat  ? parseFloat(b.lat)  : null;
       const lng         = b.lng  ? parseFloat(b.lng)  : null;
       const polygon     = b.polygon || null;
+      const formation   = req.session.formation || null;
+      const unit        = req.session.unit || req.session.userId || null;
+      const created_by  = req.session.userId || null;
 
       const [result] = await pool.query(`
         INSERT INTO civilians
           (house_no,name,mobile,community,religion,occupation,
            immovable_property,movable_property,salary,income,expenditure,
-           health_status,area,village,lat,lng,polygon,family_details,photo_path,document_path)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+           health_status,area,village,formation,unit,lat,lng,polygon,family_details,photo_path,document_path,created_by)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
         house_no || null, name, mobile,
         b.community || null, b.religion || null, b.occupation || null,
         b.immovable_property || null, b.movable_property || null,
         salary, income, expenditure,
         b.health_status || null, b.area || null, b.village || null,
+        formation, unit,
         lat, lng, polygon,
         parseFamily(b.family_details), photo_path || null, document_path || null,
+        created_by,
       ]);
 
       res.json({ success: true, message: 'Record saved successfully!', id: result.insertId });
@@ -302,6 +482,7 @@ app.put('/api/civilians/:id', requireAuth,
       const [existing] = await pool.query('SELECT * FROM civilians WHERE id = ? LIMIT 1', [id]);
       if (!existing.length) return res.json({ success: false, message: 'Record not found.' });
       const rec = existing[0];
+      if (!denyUnlessOwner(rec, req.session.userId, res)) return;
 
       const b = req.body;
       const name   = (b.name   || '').trim();
@@ -364,8 +545,9 @@ app.put('/api/civilians/:id', requireAuth,
 app.delete('/api/civilians/:id', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const [rows] = await pool.query('SELECT photo_path, document_path FROM civilians WHERE id = ? LIMIT 1', [id]);
+    const [rows] = await pool.query('SELECT photo_path, document_path, created_by FROM civilians WHERE id = ? LIMIT 1', [id]);
     if (!rows.length) return res.json({ success: false, message: 'Record not found.' });
+    if (!denyUnlessOwner(rows[0], req.session.userId, res)) return;
     await pool.query('DELETE FROM civilians WHERE id = ?', [id]);
     deleteFile(rows[0].photo_path);
     deleteFile(rows[0].document_path);
@@ -380,12 +562,150 @@ app.patch('/api/civilians/:id/house-no', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const house_no = (req.body.house_no || '').trim() || null;
-    const [rows] = await pool.query('SELECT id FROM civilians WHERE id = ? LIMIT 1', [id]);
+    const [rows] = await pool.query('SELECT id, created_by FROM civilians WHERE id = ? LIMIT 1', [id]);
     if (!rows.length) return res.json({ success: false, message: 'Record not found.' });
+    if (!denyUnlessOwner(rows[0], req.session.userId, res)) return;
     await pool.query('UPDATE civilians SET house_no = ? WHERE id = ?', [house_no, id]);
     res.json({ success: true, message: 'House number updated.' });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'Failed to update.' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// CIVIL DIRECTORY (separate from civilians registry)
+// ══════════════════════════════════════════════════════════════
+
+async function initCiviliansSchema() {
+  const [cols] = await pool.query(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'civilians'`
+  );
+  const names = new Set(cols.map(c => c.COLUMN_NAME));
+  if (!names.has('created_by')) {
+    await pool.query('ALTER TABLE civilians ADD COLUMN created_by VARCHAR(64) DEFAULT NULL');
+    console.log('Added civilians.created_by column');
+    const [r] = await pool.query(
+      `UPDATE civilians SET created_by = unit
+       WHERE (created_by IS NULL OR created_by = '') AND unit IS NOT NULL AND unit != ''`
+    );
+    if (r.affectedRows) console.log(`Backfilled created_by on ${r.affectedRows} existing record(s)`);
+  }
+}
+
+async function initDirectoryTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS civil_directory (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      mobile VARCHAR(20) NOT NULL,
+      designation VARCHAR(255) DEFAULT NULL,
+      village VARCHAR(255) DEFAULT NULL,
+      area VARCHAR(255) DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_dir_name (name),
+      INDEX idx_dir_area (area),
+      INDEX idx_dir_village (village)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+}
+
+function validateDirectoryBody(body) {
+  const name        = (body.name || '').trim();
+  const mobile      = (body.mobile || '').trim();
+  const designation = (body.designation || '').trim() || null;
+  const village     = (body.village || '').trim() || null;
+  const area        = (body.area || '').trim() || null;
+
+  if (!name)   return { error: 'Name is required.' };
+  if (!mobile) return { error: 'Contact number is required.' };
+  if (!/^[6-9]\d{9}$/.test(mobile))
+    return { error: 'Enter a valid 10-digit Indian mobile number.' };
+  if (area && !DEFINED_AREAS.includes(area))
+    return { error: 'Invalid area selected.' };
+  if (village && !DEFINED_VILLAGES.includes(village))
+    return { error: 'Invalid village selected.' };
+
+  return { name, mobile, designation, village, area };
+}
+
+app.get('/api/directory', requireAuth, async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    let records;
+    if (!q) {
+      [records] = await pool.query('SELECT * FROM civil_directory ORDER BY name ASC');
+    } else {
+      const like = `%${q}%`;
+      [records] = await pool.query(`
+        SELECT * FROM civil_directory
+        WHERE name LIKE ? OR mobile LIKE ? OR designation LIKE ?
+           OR village LIKE ? OR area LIKE ?
+        ORDER BY name ASC
+      `, Array(5).fill(like));
+    }
+    res.json({ success: true, records });
+  } catch (e) {
+    console.error(e);
+    res.json({ success: false, message: 'Directory load error' });
+  }
+});
+
+app.get('/api/directory/:id', requireAuth, async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM civil_directory WHERE id = ? LIMIT 1', [req.params.id]);
+    if (!rows.length) return res.json({ success: false, message: 'Entry not found.' });
+    res.json({ success: true, record: rows[0] });
+  } catch (e) {
+    console.error(e);
+    res.json({ success: false, message: 'Directory load error' });
+  }
+});
+
+app.post('/api/directory', requireAuth, async (req, res) => {
+  try {
+    const v = validateDirectoryBody(req.body);
+    if (v.error) return res.json({ success: false, message: v.error });
+    const [result] = await pool.query(`
+      INSERT INTO civil_directory (name, mobile, designation, village, area)
+      VALUES (?, ?, ?, ?, ?)
+    `, [v.name, v.mobile, v.designation, v.village, v.area]);
+    res.json({ success: true, message: 'Directory entry added.', id: result.insertId });
+  } catch (e) {
+    console.error(e);
+    res.json({ success: false, message: 'Failed to add entry.' });
+  }
+});
+
+app.put('/api/directory/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const [existing] = await pool.query('SELECT id FROM civil_directory WHERE id = ? LIMIT 1', [id]);
+    if (!existing.length) return res.json({ success: false, message: 'Entry not found.' });
+    const v = validateDirectoryBody(req.body);
+    if (v.error) return res.json({ success: false, message: v.error });
+    await pool.query(`
+      UPDATE civil_directory SET name=?, mobile=?, designation=?, village=?, area=?
+      WHERE id=?
+    `, [v.name, v.mobile, v.designation, v.village, v.area, id]);
+    res.json({ success: true, message: 'Directory entry updated.' });
+  } catch (e) {
+    console.error(e);
+    res.json({ success: false, message: 'Failed to update entry.' });
+  }
+});
+
+app.delete('/api/directory/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const [rows] = await pool.query('SELECT id FROM civil_directory WHERE id = ? LIMIT 1', [id]);
+    if (!rows.length) return res.json({ success: false, message: 'Entry not found.' });
+    await pool.query('DELETE FROM civil_directory WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Directory entry deleted.' });
+  } catch (e) {
+    console.error(e);
+    res.json({ success: false, message: 'Failed to delete entry.' });
   }
 });
 
@@ -406,11 +726,15 @@ app.get('/api/search', requireAuth, async (req, res) => {
         SELECT * FROM civilians
         WHERE name LIKE ? OR mobile LIKE ? OR village LIKE ?
            OR area LIKE ? OR occupation LIKE ? OR health_status LIKE ?
-           OR family_details LIKE ?
+           OR family_details LIKE ? OR house_no LIKE ?
+           OR community LIKE ? OR religion LIKE ?
+           OR immovable_property LIKE ? OR movable_property LIKE ?
+           OR CAST(salary AS CHAR) LIKE ? OR CAST(income AS CHAR) LIKE ?
+           OR CAST(expenditure AS CHAR) LIKE ?
         ORDER BY created_at DESC
-      `, Array(7).fill(like));
+      `, Array(14).fill(like));
     }
-    res.json({ success: true, records, mode });
+    res.json({ success: true, records: withEditFlags(records, req.session.userId), mode });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'Search error' });
   }
@@ -423,19 +747,18 @@ app.get('/api/search', requireAuth, async (req, res) => {
 app.get('/api/house-list', requireAuth, async (req, res) => {
   try {
     const [records] = await pool.query(
-      'SELECT id, house_no, name, mobile, village, area FROM civilians ORDER BY CAST(house_no AS UNSIGNED) ASC, name ASC'
+      'SELECT id, house_no, name, mobile, village, area, created_by FROM civilians ORDER BY CAST(house_no AS UNSIGNED) ASC, name ASC'
     );
-    res.json({ success: true, records });
+    res.json({ success: true, records: withEditFlags(records, req.session.userId) });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'DB error' });
   }
 });
 
 // ══════════════════════════════════════════════════════════════
-// NEWS (Times of India RSS proxy)
+// NEWS (J&K local news RSS proxy)
 // ══════════════════════════════════════════════════════════════
 
-const TOI = 'https://timesofindia.indiatimes.com';
 const rssParser = new RSSParser({
   timeout: 20000,
   headers: {
@@ -445,79 +768,11 @@ const rssParser = new RSSParser({
   },
 });
 
-// Official TOI RSS endpoints (see https://timesofindia.indiatimes.com/rss.cms)
 const RSS_FEEDS = {
-  // —— Main feeds ——
-  top_stories:    { label: 'Top Stories',      group: 'Main', url: `${TOI}/rssfeedstopstories.cms` },
-  most_recent:    { label: 'Most Recent',      group: 'Main', url: `${TOI}/rssfeedmostrecent.cms` },
-  india:          { label: 'India',            group: 'Main', url: `${TOI}/rssfeeds/-2128936835.cms` },
-  world:          { label: 'World',            group: 'Main', url: `${TOI}/rssfeeds/296589292.cms` },
-  nri:            { label: 'NRI',              group: 'Main', url: `${TOI}/rssfeeds/7098551.cms` },
-  business:       { label: 'Business',         group: 'Main', url: `${TOI}/rssfeeds/1898055.cms` },
-  us:             { label: 'US',               group: 'Main', url: `${TOI}/rssfeeds_us/72258322.cms` },
-  cricket:        { label: 'Cricket',          group: 'Main', url: `${TOI}/rssfeeds/54829575.cms` },
-  sports:         { label: 'Sports',           group: 'Main', url: `${TOI}/rssfeeds/4719148.cms` },
-  science:        { label: 'Science',          group: 'Main', url: `${TOI}/rssfeeds/-2128672765.cms` },
-  environment:    { label: 'Environment',      group: 'Main', url: `${TOI}/rssfeeds/2647163.cms` },
-  tech:           { label: 'Tech',             group: 'Main', url: `${TOI}/rssfeeds/66949542.cms` },
-  education:      { label: 'Education',        group: 'Main', url: `${TOI}/rssfeeds/913168846.cms` },
-  entertainment:  { label: 'Entertainment',    group: 'Main', url: `${TOI}/rssfeeds/1081479906.cms` },
-  life_style:     { label: 'Life & Style',     group: 'Main', url: `${TOI}/rssfeeds/2886704.cms` },
-  most_read:      { label: 'Most Read',        group: 'Main', url: `${TOI}/rssfeedmostread.cms` },
-  most_shared:    { label: 'Most Shared',      group: 'Main', url: `${TOI}/rssfeedmostshared.cms` },
-  most_commented: { label: 'Most Commented',   group: 'Main', url: `${TOI}/rssfeedmostcommented.cms` },
-  astrology:      { label: 'Astrology',        group: 'Main', url: `${TOI}/rssfeeds/65857041.cms` },
-  auto:           { label: 'Auto',             group: 'Main', url: `${TOI}/rssfeeds/74317216.cms` },
-
-  // —— Cities ——
-  mumbai:              { label: 'Mumbai',               group: 'Cities', url: `${TOI}/rssfeeds/-2128838597.cms` },
-  delhi:               { label: 'Delhi',                group: 'Cities', url: `${TOI}/rssfeeds/-2128839596.cms` },
-  bengaluru:           { label: 'Bengaluru',            group: 'Cities', url: `${TOI}/rssfeeds/-2128833038.cms` },
-  hyderabad:           { label: 'Hyderabad',            group: 'Cities', url: `${TOI}/rssfeeds/-2128816011.cms` },
-  chennai:             { label: 'Chennai',              group: 'Cities', url: `${TOI}/rssfeeds/2950623.cms` },
-  ahmedabad:           { label: 'Ahmedabad',            group: 'Cities', url: `${TOI}/rssfeeds/-2128821153.cms` },
-  allahabad:           { label: 'Prayagraj (Allahabad)', group: 'Cities', url: `${TOI}/rssfeeds/3947060.cms` },
-  bhubaneswar:         { label: 'Bhubaneswar',          group: 'Cities', url: `${TOI}/rssfeeds/4118235.cms` },
-  coimbatore:          { label: 'Coimbatore',           group: 'Cities', url: `${TOI}/rssfeeds/7503091.cms` },
-  gurgaon:             { label: 'Gurgaon',              group: 'Cities', url: `${TOI}/rssfeeds/6547154.cms` },
-  guwahati:            { label: 'Guwahati',             group: 'Cities', url: `${TOI}/rssfeeds/4118215.cms` },
-  hubli:               { label: 'Hubli',                group: 'Cities', url: `${TOI}/rssfeeds/3942695.cms` },
-  kanpur:              { label: 'Kanpur',               group: 'Cities', url: `${TOI}/rssfeeds/3947067.cms` },
-  kolkata:             { label: 'Kolkata',              group: 'Cities', url: `${TOI}/rssfeeds/-2128830821.cms` },
-  ludhiana:            { label: 'Ludhiana',             group: 'Cities', url: `${TOI}/rssfeeds/3947051.cms` },
-  mangalore:           { label: 'Mangalore',            group: 'Cities', url: `${TOI}/rssfeeds/3942690.cms` },
-  mysore:              { label: 'Mysore',               group: 'Cities', url: `${TOI}/rssfeeds/3942693.cms` },
-  noida:               { label: 'Noida',                group: 'Cities', url: `${TOI}/rssfeeds/8021716.cms` },
-  pune:                { label: 'Pune',                 group: 'Cities', url: `${TOI}/rssfeeds/-2128821991.cms` },
-  goa:                 { label: 'Goa',                  group: 'Cities', url: `${TOI}/rssfeeds/3012535.cms` },
-  chandigarh:          { label: 'Chandigarh',           group: 'Cities', url: `${TOI}/rssfeeds/-2128816762.cms` },
-  lucknow:             { label: 'Lucknow',              group: 'Cities', url: `${TOI}/rssfeeds/-2128819658.cms` },
-  patna:               { label: 'Patna',                group: 'Cities', url: `${TOI}/rssfeeds/-2128817995.cms` },
-  jaipur:              { label: 'Jaipur',               group: 'Cities', url: `${TOI}/rssfeeds/3012544.cms` },
-  nagpur:              { label: 'Nagpur',               group: 'Cities', url: `${TOI}/rssfeeds/442002.cms` },
-  rajkot:              { label: 'Rajkot',               group: 'Cities', url: `${TOI}/rssfeeds/3942663.cms` },
-  ranchi:              { label: 'Ranchi',               group: 'Cities', url: `${TOI}/rssfeeds/4118245.cms` },
-  surat:               { label: 'Surat',                group: 'Cities', url: `${TOI}/rssfeeds/3942660.cms` },
-  vadodara:            { label: 'Vadodara',             group: 'Cities', url: `${TOI}/rssfeeds/3942666.cms` },
-  varanasi:            { label: 'Varanasi',             group: 'Cities', url: `${TOI}/rssfeeds/3947071.cms` },
-  thane:               { label: 'Thane',                group: 'Cities', url: `${TOI}/rssfeeds/3831863.cms` },
-  thiruvananthapuram:  { label: 'Thiruvananthapuram',   group: 'Cities', url: `${TOI}/rssfeeds/878156304.cms` },
-
-  // Jammu & Kashmir: Srinagar/Jammu are not on TOI’s public rss.cms city list; India national RSS routinely leads with UT stories.
-  jammu_kashmir: { label: 'Jammu & Kashmir (India headlines)', group: 'Cities', url: `${TOI}/rssfeeds/-2128936835.cms` },
-
-  // —— World (section feeds) ——
-  world_us:        { label: 'US (World)',      group: 'World', url: `${TOI}/rssfeeds/30359486.cms` },
-  pakistan:        { label: 'Pakistan',        group: 'World', url: `${TOI}/rssfeeds/30359534.cms` },
-  south_asia:      { label: 'South Asia',      group: 'World', url: `${TOI}/rssfeeds/3907412.cms` },
-  uk:              { label: 'UK',              group: 'World', url: `${TOI}/rssfeeds/2177298.cms` },
-  europe:          { label: 'Europe',          group: 'World', url: `${TOI}/rssfeeds/1898274.cms` },
-  china:           { label: 'China',           group: 'World', url: `${TOI}/rssfeeds/1898184.cms` },
-  middle_east:     { label: 'Middle East',     group: 'World', url: `${TOI}/rssfeeds/1898272.cms` },
-  rest_of_world:   { label: 'Rest of World',   group: 'World', url: `${TOI}/rssfeeds/671314.cms` },
-
-  // —— Blogs ——
-  all_blogs: { label: 'All Blogs', group: 'Blogs', url: 'https://blogs.timesofindia.indiatimes.com/feed/defaultrss' },
+  greater_kashmir:  { label: 'Greater Kashmir',  group: 'Jammu & Kashmir', url: 'https://www.greaterkashmir.com/feed/' },
+  kashmir_reader:   { label: 'Kashmir Reader',   group: 'Jammu & Kashmir', url: 'https://kashmirreader.com/feed/' },
+  kashmir_observer: { label: 'Kashmir Observer', group: 'Jammu & Kashmir', url: 'https://kashmirobserver.net/feed/' },
+  rising_kashmir:   { label: 'Rising Kashmir',   group: 'Jammu & Kashmir', url: 'https://risingkashmir.com/feed/' },
 };
 
 function rssItemImage(item) {
@@ -529,7 +784,7 @@ function rssItemImage(item) {
 }
 
 app.get('/api/news', requireAuth, async (req, res) => {
-  const key  = req.query.feed || 'jammu_kashmir';
+  const key  = req.query.feed || 'greater_kashmir';
   const feed = RSS_FEEDS[key];
   if (!feed) return res.json({ success: false, message: 'Unknown feed key.' });
   try {
@@ -541,14 +796,14 @@ app.get('/api/news', requireAuth, async (req, res) => {
       pubDate:     item.pubDate      || '',
       image:       rssItemImage(item),
     }));
-    res.json({ success: true, label: feed.label, items });
+    res.json({ success: true, label: feed.label, source: parsed.title || feed.label, items });
   } catch (e) {
     console.error('RSS fetch error:', e.message);
     res.json({ success: false, message: 'Could not fetch news feed. Please try again.' });
   }
 });
 
-const RSS_GROUP_ORDER = ['Main', 'Cities', 'World', 'Blogs'];
+const RSS_GROUP_ORDER = ['Jammu & Kashmir'];
 app.get('/api/news/feeds', requireAuth, (req, res) => {
   const rank = g => {
     const i = RSS_GROUP_ORDER.indexOf(g);
@@ -560,5 +815,40 @@ app.get('/api/news/feeds', requireAuth, (req, res) => {
   res.json({ success: true, feeds });
 });
 
+// ── React frontend (production) ────────────────────────────────
+if (DIST_DIR) {
+  app.use(express.static(DIST_DIR));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) return next();
+    res.sendFile(path.join(DIST_DIR, 'index.html'));
+  });
+} else if (isProd) {
+  console.warn('Frontend build not found — expected backend/public or ../frontend/dist');
+}
+
 // ── Start server ───────────────────────────────────────────────
-app.listen(PORT, () => console.log(`Civilian backend running on http://localhost:${PORT}`));
+async function startServer() {
+  console.log('Starting Civilian backend…');
+  console.log(`NODE_ENV=${process.env.NODE_ENV || '(not set)'}, PORT=${PORT}`);
+  console.log(`DB configured: host=${dbHost}, user=${process.env.DB_USER ? 'yes' : 'MISSING'}, name=${process.env.DB_NAME ? 'yes' : 'MISSING'}`);
+
+  try {
+    await initCiviliansSchema();
+    await initDirectoryTable();
+    console.log('Database connected, schema ready');
+  } catch (err) {
+    console.error('Database init failed (server will still start):', err.message);
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Civilian backend running on 0.0.0.0:${PORT} (${isProd ? 'production' : 'development'})`);
+    console.log(`Uploads directory: ${UPLOADS_DIR}`);
+    if (DIST_DIR) console.log(`Serving frontend from ${DIST_DIR}`);
+    else console.warn('No frontend build found');
+  });
+}
+
+startServer().catch(err => {
+  console.error('Server failed to start:', err);
+  process.exit(1);
+});

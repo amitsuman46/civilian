@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "NODE_ENV=production node server.js",
+    "dev": "nodemon server.js",
+    "migrate:local": "DB_HOST=127.0.0.1 DB_USER=root DB_PASS=root@123 DB_NAME=civilian_db NODE_ENV=development node scripts/migrate-local.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

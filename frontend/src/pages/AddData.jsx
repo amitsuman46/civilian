@@ -1,27 +1,33 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FamilyTable    from '../components/FamilyTable';
 import WebcamCapture  from '../components/WebcamCapture';
 import MapPicker      from '../components/MapPicker';
 import { useToast }   from '../context/ToastContext';
+import { useAuth }    from '../context/AuthContext';
 import API from '../api';
 
-const HEALTH_OPTIONS = ['Excellent','Good','Fair','Poor','Critical'];
 const OCCUPATIONS    = ['Farmer','Teacher','Engineer','Doctor','Businessman','Driver','Tailor','Nurse','Homemaker','Labourer','Government Employee','Self-Employed','Student','Retired','Other'];
-const AREAS          = ['A Coy','B Coy','C Coy','D Coy','E Coy','F Coy','HQ Coy'];
-const VILLAGES       = ['Gagariyan','Barmiya and Doba','Upper Gagariyan','Wazli','kainth','Sawjiya(Maidan)','Sawjiya','Sawjian(Mir Muhallah)','Sawjian(Bandi Muhallah)','Sawjian(Ladhi Muhallah)','Sawjian(Purya Muhallah)','Sawjian(Tantary Muhallah)','Sawjian(Gantar)','Sawjian(Sundri)'];
-const COMMUNITIES    = ['Kashmiri','Hindu','Muslim','Sikh','Christian','Buddhist','Jain','Other'];
+const AREAS          = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
+const COMMUNITIES    = ['Dogras','Gujjars','Bakarwals','Paharis','Others'];
 const RELIGIONS      = ['Islam','Hinduism','Sikhism','Christianity','Buddhism','Jainism','Other'];
 
 const EMPTY = {
   house_no:'', name:'', mobile:'', village:'', area:'', occupation:'',
-  community:'', religion:'', health_status:'',
+  community:'', religion:'',
   immovable_property:'', movable_property:'', income:'', expenditure:'', salary:'',
+  formation:'', unit:'',
 };
 
 export default function AddData() {
   const navigate   = useNavigate();
   const showToast  = useToast();
+  const { user }   = useAuth();
+
+  const unitDefaults = useMemo(() => ({
+    formation: user?.formation || '',
+    unit: user?.unit || user?.user_id || '',
+  }), [user]);
 
   const [form, setForm]         = useState(EMPTY);
   const [family, setFamily]     = useState([]);
@@ -40,6 +46,15 @@ export default function AddData() {
 
   const photoInputRef = useRef(null);
   const docInputRef   = useRef(null);
+
+  useEffect(() => {
+    if (!user) return;
+    setForm(f => ({
+      ...f,
+      formation: user.formation || '',
+      unit: user.unit || user.user_id || '',
+    }));
+  }, [user]);
 
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }));
 
@@ -120,7 +135,7 @@ export default function AddData() {
   };
 
   const resetForm = () => {
-    setForm(EMPTY);
+    setForm({ ...EMPTY, ...unitDefaults });
     setFamily([]);
     setMapData({ lat: null, lng: null, polygon: null });
     setPhotoFile(null); setDocFile(null);
@@ -153,6 +168,16 @@ export default function AddData() {
           <div className="form-card-body">
             <div className="form-grid three">
               <div className="form-group">
+                <label>Formation</label>
+                <input type="text" value={form.formation} readOnly className="readonly-field"
+                  placeholder="Set on your user account" />
+              </div>
+              <div className="form-group">
+                <label>Unit</label>
+                <input type="text" value={form.unit} readOnly className="readonly-field"
+                  placeholder="Set on your user account" />
+              </div>
+              <div className="form-group">
                 <label>House No <span className="req">*</span></label>
                 <input type="text" value={form.house_no} onChange={e => set('house_no', e.target.value)}
                   placeholder="e.g. 01" maxLength={20} className={errors.house_no ? 'invalid' : ''} />
@@ -173,19 +198,25 @@ export default function AddData() {
             </div>
           </div>
         </div>
-
-        {/* SECTION 2 — Location & Personal */}
         <div className="form-card">
           <div className="form-card-header"><i className="fas fa-map-marker-alt"></i> Location &amp; Personal Details</div>
           <div className="form-card-body">
             <div className="form-grid three">
+              <div className="form-group">
+                <label>Village / Town</label>
+                <input
+                  type="text"
+                  value={form.village}
+                  onChange={e => set('village', e.target.value)}
+                  placeholder="e.g. Sawjian"
+                  maxLength={100}
+                />
+              </div>
               {[
-                { label:'Village / Town', field:'village', opts: VILLAGES },
                 { label:'Area / Zone',    field:'area',    opts: AREAS },
                 { label:'Occupation',     field:'occupation', opts: OCCUPATIONS },
                 { label:'Community',      field:'community',  opts: COMMUNITIES },
                 { label:'Religion',       field:'religion',   opts: RELIGIONS },
-                { label:'Health Status',  field:'health_status', opts: HEALTH_OPTIONS },
               ].map(({ label, field, opts }) => (
                 <div className="form-group" key={field}>
                   <label>{label}</label>

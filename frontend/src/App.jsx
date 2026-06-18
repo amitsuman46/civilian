@@ -8,6 +8,8 @@ import Dashboard     from './pages/Dashboard';
 import Home          from './pages/Home';
 import AddData       from './pages/AddData';
 import ViewData      from './pages/ViewData';
+import CivilDirectory from './pages/CivilDirectory';
+import DirectoryForm  from './pages/DirectoryForm';
 import UpdateDelete  from './pages/UpdateDelete';
 import EditRecord    from './pages/EditRecord';
 import FullReport    from './pages/FullReport';
@@ -31,8 +33,8 @@ function PublicRoute({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <ToastProvider>
+      <ToastProvider>
+        <AuthProvider>
           <ConfirmProvider>
             <Routes>
               <Route path="/" element={<PublicRoute><Login /></PublicRoute>} />
@@ -40,6 +42,9 @@ export default function App() {
                 <Route index          element={<Home />} />
                 <Route path="add"     element={<AddData />} />
                 <Route path="view"    element={<ViewData />} />
+                <Route path="directory" element={<CivilDirectory />} />
+                <Route path="directory/add" element={<DirectoryForm />} />
+                <Route path="directory/edit/:id" element={<DirectoryForm />} />
                 <Route path="update"  element={<UpdateDelete />} />
                 <Route path="edit/:id"   element={<EditRecord />} />
                 <Route path="report/:id" element={<FullReport />} />
@@ -51,8 +56,8 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </ConfirmProvider>
-        </ToastProvider>
-      </AuthProvider>
+        </AuthProvider>
+      </ToastProvider>
     </BrowserRouter>
   );
 }

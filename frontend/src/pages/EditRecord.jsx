@@ -6,11 +6,9 @@ import MapPicker     from '../components/MapPicker';
 import { useToast }  from '../context/ToastContext';
 import API from '../api';
 
-const HEALTH_OPTIONS = ['Excellent','Good','Fair','Poor','Critical'];
 const OCCUPATIONS    = ['Farmer','Teacher','Engineer','Doctor','Businessman','Driver','Tailor','Nurse','Homemaker','Labourer','Government Employee','Self-Employed','Student','Retired','Other'];
-const AREAS          = ['A Coy','B Coy','C Coy','D Coy','E Coy','F Coy','HQ Coy'];
-const VILLAGES       = ['Gagariyan','Barmiya and Doba','Upper Gagariyan','Wazli','kainth','Sawjiya(Maidan)','Sawjiya','Sawjian(Mir Muhallah)','Sawjian(Bandi Muhallah)','Sawjian(Ladhi Muhallah)','Sawjian(Purya Muhallah)','Sawjian(Tantary Muhallah)','Sawjian(Gantar)','Sawjian(Sundri)'];
-const COMMUNITIES    = ['Kashmiri','Hindu','Muslim','Sikh','Christian','Buddhist','Jain','Other'];
+const AREAS          = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
+const COMMUNITIES    = ['Dogras','Gujjars','Bakarwals','Paharis','Others'];
 const RELIGIONS      = ['Islam','Hinduism','Sikhism','Christianity','Buddhism','Jainism','Other'];
 
 export default function EditRecord() {
@@ -33,6 +31,7 @@ export default function EditRecord() {
   const [errors, setErrors] = useState({});
   const [busy, setBusy]     = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
 
   const photoRef = useRef(null);
   const docRef   = useRef(null);
@@ -40,12 +39,13 @@ export default function EditRecord() {
   useEffect(() => {
     API.get(`/api/civilians/${id}`).then(data => {
       if (!data.success) { setNotFound(true); return; }
+      if (!data.record.can_edit) { setForbidden(true); return; }
       const r = data.record;
       setRec(r);
       setForm({
         house_no: r.house_no || '', name: r.name || '', mobile: r.mobile || '',
         village: r.village || '', area: r.area || '', occupation: r.occupation || '',
-        community: r.community || '', religion: r.religion || '', health_status: r.health_status || '',
+        community: r.community || '', religion: r.religion || '',
         immovable_property: r.immovable_property || '', movable_property: r.movable_property || '',
         income: r.income || '', expenditure: r.expenditure || '', salary: r.salary || '',
       });
@@ -113,6 +113,12 @@ export default function EditRecord() {
   const ErrMsg = ({ field }) => errors[field]
     ? <span className="field-error">{errors[field]}</span> : null;
 
+  if (forbidden) return (
+    <div className="alert alert-warning">
+      <i className="fas fa-lock"></i> You can only edit records you created.{' '}
+      <Link to="/dashboard/update">Back to Update / Delete</Link>
+    </div>
+  );
   if (notFound) return <div className="alert alert-danger"><i className="fas fa-triangle-exclamation"></i> Record not found.</div>;
   if (!rec) return <div style={{padding:'3rem', textAlign:'center'}}><div className="loading-spinner" style={{margin:'0 auto'}}></div></div>;
 
@@ -167,13 +173,21 @@ export default function EditRecord() {
           <div className="form-card-header"><i className="fas fa-map-marker-alt"></i> Location &amp; Personal Details</div>
           <div className="form-card-body">
             <div className="form-grid three">
+              <div className="form-group">
+                <label>Village / Town</label>
+                <input
+                  type="text"
+                  value={form.village}
+                  onChange={e => set('village', e.target.value)}
+                  placeholder="e.g. Sawjian"
+                  maxLength={100}
+                />
+              </div>
               {[
-                { label:'Village / Town', field:'village',      opts: VILLAGES },
                 { label:'Area / Zone',    field:'area',         opts: AREAS },
                 { label:'Occupation',     field:'occupation',   opts: OCCUPATIONS },
                 { label:'Community',      field:'community',    opts: COMMUNITIES },
                 { label:'Religion',       field:'religion',     opts: RELIGIONS },
-                { label:'Health Status',  field:'health_status',opts: HEALTH_OPTIONS },
               ].map(({ label, field, opts }) => (
                 <div className="form-group" key={field}>
                   <label>{label}</label>

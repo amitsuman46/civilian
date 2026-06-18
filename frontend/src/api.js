@@ -1,46 +1,64 @@
-// Thin fetch wrapper — all requests go through Vite proxy to localhost:3001
+let onUnauthorized = null;
+let unauthorizedHandled = false;
+
+export function setUnauthorizedHandler(handler) {
+  onUnauthorized = handler;
+}
+
+export function resetUnauthorizedGuard() {
+  unauthorizedHandled = false;
+}
+
+async function request(url, options = {}) {
+  const res = await fetch(url, { credentials: 'include', ...options });
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    data = { success: false, message: 'Server error.' };
+  }
+
+  if (res.status === 401 && onUnauthorized && !unauthorizedHandled) {
+    unauthorizedHandled = true;
+    onUnauthorized(data.message || 'Unauthorized');
+  }
+
+  return data;
+}
+
 const API = {
-  async get(url) {
-    const res = await fetch(url, { credentials: 'include' });
-    return res.json();
+  get(url) {
+    return request(url);
   },
-  async post(url, body) {
+  post(url, body) {
     const isForm = body instanceof FormData;
-    const res = await fetch(url, {
+    return request(url, {
       method: 'POST',
-      credentials: 'include',
       headers: isForm ? undefined : { 'Content-Type': 'application/json' },
       body: isForm ? body : JSON.stringify(body),
     });
-    return res.json();
   },
-  async put(url, body) {
+  put(url, body) {
     const isForm = body instanceof FormData;
-    const res = await fetch(url, {
+    return request(url, {
       method: 'PUT',
-      credentials: 'include',
       headers: isForm ? undefined : { 'Content-Type': 'application/json' },
       body: isForm ? body : JSON.stringify(body),
     });
-    return res.json();
   },
-  async patch(url, body) {
-    const res = await fetch(url, {
+  patch(url, body) {
+    return request(url, {
       method: 'PATCH',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    return res.json();
   },
-  async delete(url, body) {
-    const res = await fetch(url, {
+  delete(url, body) {
+    return request(url, {
       method: 'DELETE',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     });
-    return res.json();
   },
 };
 

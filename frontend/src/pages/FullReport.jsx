@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap } from 'react-leaflet';
+import MapResize from '../components/MapResize';
 import API from '../api';
 
 function AutoFit({ pin, polygon }) {
@@ -30,12 +31,6 @@ function fmt(str) {
   return new Date(str).toLocaleString('en-US', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:true });
 }
 function fmtMoney(v) { return v && parseFloat(v) > 0 ? '₹' + parseFloat(v).toLocaleString('en-IN', { minimumFractionDigits:2 }) : 'N/A'; }
-
-const HEALTH_COLOR = {
-  'Excellent': 'var(--success)', 'Good': 'var(--success)',
-  'Fair':      'var(--warning)',
-  'Poor':      'var(--danger)',  'Critical': 'var(--danger)',
-};
 
 export default function FullReport() {
   const { id } = useParams();
@@ -86,7 +81,9 @@ export default function FullReport() {
         </div>
         <div className="page-actions">
           <Link to="/dashboard/view" className="btn btn-secondary btn-sm"><i className="fas fa-arrow-left"></i> Back</Link>
-          <Link to={`/dashboard/edit/${rec.id}`} className="btn btn-primary btn-sm"><i className="fas fa-pen"></i> Edit</Link>
+          {rec.can_edit && (
+            <Link to={`/dashboard/edit/${rec.id}`} className="btn btn-primary btn-sm"><i className="fas fa-pen"></i> Edit</Link>
+          )}
           <button onClick={() => window.print()} className="btn btn-outline-primary btn-sm"><i className="fas fa-print"></i> Print</button>
         </div>
       </div>
@@ -174,12 +171,6 @@ export default function FullReport() {
                     <div className="detail-value">{val || 'N/A'}</div>
                   </div>
                 ))}
-                <div className="detail-item">
-                  <div className="detail-label"><i className="fas fa-heart-pulse"></i> Health Status</div>
-                  <div className="detail-value" style={{color: HEALTH_COLOR[rec.health_status] || 'var(--text)', fontWeight:700}}>
-                    {rec.health_status || 'N/A'}
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -200,6 +191,7 @@ export default function FullReport() {
                   zoomControl={true}
                   dragging={true}
                 >
+                  <MapResize />
                   <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"

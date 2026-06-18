@@ -1,10 +1,12 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import { useViewportRefresh } from '../hooks/useViewportRefresh';
 
 const PAGE_TITLES = {
   '/dashboard':         'Dashboard',
   '/dashboard/add':     'Add Data',
-  '/dashboard/view':    'View Data',
+  '/dashboard/view':       'View Data',
+  '/dashboard/directory': 'Civil Directory',
   '/dashboard/update':  'Update / Delete',
   '/dashboard/houseno': 'Assign House No',
   '/dashboard/about':   'About',
@@ -13,7 +15,9 @@ const PAGE_TITLES = {
 
 function getTitle(pathname) {
   if (pathname.startsWith('/dashboard/report/')) return 'Full Report';
-  if (pathname.startsWith('/dashboard/edit/'))   return 'Edit Record';
+  if (pathname.startsWith('/dashboard/edit/')) return 'Edit Record';
+  if (pathname === '/dashboard/directory/add') return 'Add Directory Entry';
+  if (pathname.startsWith('/dashboard/directory/edit/')) return 'Edit Directory Entry';
   return PAGE_TITLES[pathname] || 'Dashboard';
 }
 
@@ -22,8 +26,10 @@ export default function Dashboard() {
   const title    = getTitle(location.pathname);
   const isHome   = location.pathname === '/dashboard';
 
+  useViewportRefresh();
+
   return (
-    <div style={{ display:'flex', flexDirection:'column', minHeight:'100vh' }}>
+    <div className="app-shell">
       <Navbar />
 
       {/* Breadcrumb */}
@@ -41,7 +47,7 @@ export default function Dashboard() {
       </div>
 
       {/* Page content */}
-      <main className="main-content" style={{ flex: 1 }}>
+      <main className="main-content">
         <div className="container">
           <Outlet />
         </div>

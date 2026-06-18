@@ -107,12 +107,25 @@ export default function UpdateDelete() {
                   {r.area          && <span className="cc-tag area"><i className="fas fa-location-dot"></i>{r.area}</span>}
                 </div>
                 <div className="cc-actions">
-                  <Link to={`/dashboard/edit/${r.id}`} className="btn btn-primary btn-sm">
-                    <i className="fas fa-pen"></i> Update
-                  </Link>
-                  <button className="btn btn-danger btn-sm" onClick={() => handleDelete(r)}>
-                    <i className="fas fa-trash"></i> Delete
-                  </button>
+                  {r.can_edit ? (
+                    <>
+                      <Link to={`/dashboard/edit/${r.id}`} className="btn btn-primary btn-sm">
+                        <i className="fas fa-pen"></i> Update
+                      </Link>
+                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(r)}>
+                        <i className="fas fa-trash"></i> Delete
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Link to={`/dashboard/report/${r.id}`} className="btn btn-secondary btn-sm">
+                        <i className="fas fa-eye"></i> View
+                      </Link>
+                      <span className="cc-readonly-hint" title="Only the user who added this record can edit or delete it">
+                        <i className="fas fa-lock"></i> Read only
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             );

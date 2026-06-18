@@ -1,5 +1,14 @@
 node_modules/
+# Local dev uploads only — production uses ../civilian-uploads on the server
 backend/uploads/
+civilian-uploads/
 *.env
 .DS_Store
 .claude/
+
+# Build outputs
+frontend/dist/
+backend/public/
+
+# Deployment artifacts
+civilian-app.zip
