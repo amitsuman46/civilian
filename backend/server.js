@@ -163,14 +163,6 @@ function denyUnlessOwner(record, userId, res) {
   return false;
 }
 
-const DEFINED_AREAS = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
-const DEFINED_VILLAGES = [
-  'Gagariyan','Barmiya and Doba','Upper Gagariyan','Wazli','kainth',
-  'Sawjiya(Maidan)','Sawjiya','Sawjian(Mir Muhallah)','Sawjian(Bandi Muhallah)',
-  'Sawjian(Ladhi Muhallah)','Sawjian(Purya Muhallah)','Sawjian(Tantary Muhallah)',
-  'Sawjian(Gantar)','Sawjian(Sundri)',
-];
-
 function parseDashFilters(query) {
   const area = typeof query.area === 'string' && query.area.trim()
     ? query.area.trim() : null;
@@ -646,10 +638,6 @@ function validateDirectoryBody(body) {
   if (!mobile) return { error: 'Contact number is required.' };
   if (!/^[6-9]\d{9}$/.test(mobile))
     return { error: 'Enter a valid 10-digit Indian mobile number.' };
-  if (area && !DEFINED_AREAS.includes(area))
-    return { error: 'Invalid area selected.' };
-  if (village && !DEFINED_VILLAGES.includes(village))
-    return { error: 'Invalid village selected.' };
 
   return { name, mobile, designation, village, area };
 }

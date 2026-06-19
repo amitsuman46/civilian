@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import API from '../api';
-import { DIRECTORY_AREAS, DIRECTORY_VILLAGES } from '../constants/directoryOptions';
 
 const COLUMNS = [
   { key: 'name',        label: 'Name',        sortable: true, sticky: true },
@@ -49,6 +48,15 @@ export default function CivilDirectory() {
   useEffect(() => { setPage(1); }, [query, areaFilter, villageFilter, pageSize, sortKey, sortDir]);
 
   const trimmedQuery = query.trim();
+
+  const areaOptions = useMemo(
+    () => [...new Set(records.map(r => r.area).filter(Boolean))].sort(),
+    [records],
+  );
+  const villageOptions = useMemo(
+    () => [...new Set(records.map(r => r.village).filter(Boolean))].sort(),
+    [records],
+  );
 
   const filtered = useMemo(() => {
     let rows = records;
@@ -142,11 +150,11 @@ export default function CivilDirectory() {
         <div className="cdir-filters">
           <select value={areaFilter} onChange={e => setAreaFilter(e.target.value)} aria-label="Filter by area">
             <option value="">All Areas</option>
-            {DIRECTORY_AREAS.map(a => <option key={a} value={a}>{a}</option>)}
+            {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
           <select value={villageFilter} onChange={e => setVillageFilter(e.target.value)} aria-label="Filter by village">
             <option value="">All Villages</option>
-            {DIRECTORY_VILLAGES.map(v => <option key={v} value={v}>{v}</option>)}
+            {villageOptions.map(v => <option key={v} value={v}>{v}</option>)}
           </select>
           {hasLocalFilters && (
             <button type="button" className="cdir-clear-btn" onClick={clearFilters}>

@@ -3,8 +3,6 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import API from '../api';
 import {
-  DIRECTORY_AREAS,
-  DIRECTORY_VILLAGES,
   DIRECTORY_DESIGNATIONS,
 } from '../constants/directoryOptions';
 
@@ -71,8 +69,8 @@ export default function DirectoryForm() {
         name: form.name.trim(),
         mobile: form.mobile.trim(),
         designation: form.designation.trim() || null,
-        village: form.village || null,
-        area: form.area || null,
+        village: form.village.trim() || null,
+        area: form.area.trim() || null,
       };
       const data = isEdit
         ? await API.put(`/api/directory/${id}`, body)
@@ -171,17 +169,23 @@ export default function DirectoryForm() {
               </div>
               <div className="form-group">
                 <label>Village</label>
-                <select value={form.village} onChange={e => set('village', e.target.value)}>
-                  <option value="">-- Select Village --</option>
-                  {DIRECTORY_VILLAGES.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
+                <input
+                  type="text"
+                  value={form.village}
+                  onChange={e => set('village', e.target.value)}
+                  placeholder="e.g. Sawjian"
+                  maxLength={100}
+                />
               </div>
               <div className="form-group">
                 <label>Area / Zone</label>
-                <select value={form.area} onChange={e => set('area', e.target.value)}>
-                  <option value="">-- Select Area --</option>
-                  {DIRECTORY_AREAS.map(a => <option key={a} value={a}>{a}</option>)}
-                </select>
+                <input
+                  type="text"
+                  value={form.area}
+                  onChange={e => set('area', e.target.value)}
+                  placeholder="e.g. Poonch"
+                  maxLength={100}
+                />
               </div>
             </div>
           </div>
