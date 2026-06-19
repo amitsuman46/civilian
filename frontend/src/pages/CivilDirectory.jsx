@@ -205,23 +205,27 @@ export default function CivilDirectory() {
                       </td>
                     ))}
                     <td className="cdir-td cdir-td--actions">
-                      <div className="cdir-actions">
-                        <Link
-                          to={`/dashboard/directory/edit/${r.id}`}
-                          className="cdir-action cdir-action--edit"
-                          title="Edit entry"
-                        >
-                          <i className="fas fa-pen"></i>
-                        </Link>
-                        <button
-                          type="button"
-                          className="cdir-action cdir-action--delete"
-                          title="Remove entry"
-                          onClick={() => handleDelete(r)}
-                        >
-                          <i className="fas fa-trash"></i>
-                        </button>
-                      </div>
+                      {r.can_edit ? (
+                        <div className="cdir-actions">
+                          <Link
+                            to={`/dashboard/directory/edit/${r.id}`}
+                            className="cdir-action cdir-action--edit"
+                            title="Edit entry"
+                          >
+                            <i className="fas fa-pen"></i>
+                          </Link>
+                          <button
+                            type="button"
+                            className="cdir-action cdir-action--delete"
+                            title="Remove entry"
+                            onClick={() => handleDelete(r)}
+                          >
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="cdir-muted" title="View only — created by another user">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}

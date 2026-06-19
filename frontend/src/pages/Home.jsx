@@ -18,14 +18,6 @@ const MAP_DEFAULT_ZOOM   = 6;
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-const AREAS    = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
-const VILLAGES = [
-  'Gagariyan','Barmiya and Doba','Upper Gagariyan','Wazli','kainth',
-  'Sawjiya(Maidan)','Sawjiya','Sawjian(Mir Muhallah)','Sawjian(Bandi Muhallah)',
-  'Sawjian(Ladhi Muhallah)','Sawjian(Purya Muhallah)','Sawjian(Tantary Muhallah)',
-  'Sawjian(Gantar)','Sawjian(Sundri)',
-];
-
 const chartFont  = { family: 'Inter, system-ui, sans-serif', size: 11 };
 const gridColor  = 'rgba(226,232,240,.8)';
 const tickConfig = { font: chartFont, color: '#94a3b8' };
@@ -47,7 +39,7 @@ function buildQuery(filters) {
   return qs ? `?${qs}` : '';
 }
 
-function DashFilters({ filters, onChange, onClear, hasActive, compact, formations, units }) {
+function DashFilters({ filters, onChange, onClear, hasActive, compact, formations, units, areas, villages }) {
   return (
     <div className={`dash-filters${compact ? ' dash-filters--compact' : ''}`}>
       <div className="dash-filters-fields">
@@ -77,8 +69,8 @@ function DashFilters({ filters, onChange, onClear, hasActive, compact, formation
             value={filters.area}
             onChange={e => onChange({ ...filters, area: e.target.value })}
           >
-            <option value="">All Area</option>
-            {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
+            <option value="">All Areas</option>
+            {areas.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
         </label>
         <label className="dash-filter-field">
@@ -88,7 +80,7 @@ function DashFilters({ filters, onChange, onClear, hasActive, compact, formation
             onChange={e => onChange({ ...filters, village: e.target.value })}
           >
             <option value="">All Villages</option>
-            {VILLAGES.map(v => <option key={v} value={v}>{v}</option>)}
+            {villages.map(v => <option key={v} value={v}>{v}</option>)}
           </select>
         </label>
       </div>
@@ -135,6 +127,8 @@ export default function Home() {
   const [filters, setFilters]     = useState({ area: '', village: '', formation: '', unit: '' });
   const [formations, setFormations] = useState([]);
   const [units, setUnits]           = useState([]);
+  const [areas, setAreas]           = useState([]);
+  const [villages, setVillages]     = useState([]);
   const [stickyVisible, setStickyVisible] = useState(false);
 
   const filterBarRef = useRef(null);
@@ -150,6 +144,8 @@ export default function Home() {
       if (data.success) {
         setFormations(data.formations || []);
         setUnits(data.units || []);
+        setAreas(data.areas || []);
+        setVillages(data.villages || []);
       }
     });
   }, []);
@@ -202,15 +198,15 @@ export default function Home() {
     }],
   };
 
-  const villages = stats?.village || [];
+  const villageStats = stats?.village || [];
   const shorten  = s => s.length > 24 ? s.slice(0, 22) + '…' : s;
-  const villBg   = villages.map((_, i) => `hsla(${210 + i * 11},65%,48%,.85)`);
-  const villHov  = villages.map((_, i) => `hsl(${210 + i * 11},65%,38%)`);
+  const villBg   = villageStats.map((_, i) => `hsla(${210 + i * 11},65%,48%,.85)`);
+  const villHov  = villageStats.map((_, i) => `hsl(${210 + i * 11},65%,38%)`);
   const villageChartData = {
-    labels: villages.map(d => shorten(d.label)),
+    labels: villageStats.map(d => shorten(d.label)),
     datasets: [{
       label: 'Records',
-      data: villages.map(d => d.count),
+      data: villageStats.map(d => d.count),
       backgroundColor: villBg,
       hoverBackgroundColor: villHov,
       borderRadius: 4,
@@ -240,7 +236,7 @@ export default function Home() {
       ...barOpts.plugins,
       tooltip: {
         ...tooltipDefaults,
-        callbacks: { title: items => villages[items[0].dataIndex]?.label || items[0].label },
+        callbacks: { title: items => villageStats[items[0].dataIndex]?.label || items[0].label },
       },
     },
   };
@@ -293,6 +289,8 @@ export default function Home() {
               hasActive={hasActiveFilters}
               formations={formations}
               units={units}
+              areas={areas}
+              villages={villages}
             />
             {hasActiveFilters && (
               <button type="button" className="dash-filter-clear dash-filter-clear--sticky" onClick={clearFilters}>
@@ -344,6 +342,8 @@ export default function Home() {
           hasActive={hasActiveFilters}
           formations={formations}
           units={units}
+          areas={areas}
+          villages={villages}
         />
       </div>
 
@@ -370,16 +370,34 @@ export default function Home() {
         <div className="dash-chart-card">
           <div className="dash-chart-header">
             <div className="dash-chart-title"><i className="fas fa-chart-simple"></i> Village-wise Distribution</div>
-            <span className="dash-chart-badge">{hasActiveFilters ? 'Filtered' : 'All villages'}</span>
+            <span className="dash-chart-badge">
+              {hasActiveFilters ? 'Filtered' : `${villageStats.length} with records`}
+            </span>
           </div>
-          {stats && <Bar data={villageChartData} options={villageOpts} style={{ maxHeight: '360px' }} />}
+          {stats && villageStats.length > 0 ? (
+            <Bar data={villageChartData} options={villageOpts} style={{ maxHeight: '360px' }} />
+          ) : stats ? (
+            <div className="dash-map-empty">
+              <i className="fas fa-chart-simple"></i>
+              <span>No village data in the current selection.</span>
+            </div>
+          ) : null}
         </div>
         <div className="dash-chart-card">
           <div className="dash-chart-header">
-            <div className="dash-chart-title"><i className="fas fa-shield-halved"></i> Company-wise Breakdown</div>
-            <span className="dash-chart-badge">{hasActiveFilters ? 'Filtered' : 'All Coys'}</span>
+            <div className="dash-chart-title"><i className="fas fa-shield-halved"></i> Area-wise Distribution</div>
+            <span className="dash-chart-badge">
+              {hasActiveFilters ? 'Filtered' : `${(stats?.area || []).length} with records`}
+            </span>
           </div>
-          {stats && <Bar data={areaChartData} options={areaOpts} style={{ maxHeight: '360px' }} />}
+          {stats && (stats.area?.length ?? 0) > 0 ? (
+            <Bar data={areaChartData} options={areaOpts} style={{ maxHeight: '360px' }} />
+          ) : stats ? (
+            <div className="dash-map-empty">
+              <i className="fas fa-shield-halved"></i>
+              <span>No area data in the current selection.</span>
+            </div>
+          ) : null}
         </div>
       </div>
 

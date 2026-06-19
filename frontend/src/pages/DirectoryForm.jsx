@@ -20,6 +20,7 @@ export default function DirectoryForm() {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(isEdit);
   const [busy, setBusy]     = useState(false);
+  const [forbidden, setForbidden] = useState(false);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -28,6 +29,11 @@ export default function DirectoryForm() {
       if (!data.success) {
         showToast(data.message || 'Entry not found.', 'error');
         navigate('/dashboard/directory');
+        return;
+      }
+      if (!data.record.can_edit) {
+        setForbidden(true);
+        setLoading(false);
         return;
       }
       const r = data.record;
@@ -91,6 +97,13 @@ export default function DirectoryForm() {
       </div>
     );
   }
+
+  if (forbidden) return (
+    <div className="alert alert-warning">
+      <i className="fas fa-lock"></i> You can only edit directory entries you created.{' '}
+      <Link to="/dashboard/directory">Back to Civil Directory</Link>
+    </div>
+  );
 
   return (
     <>

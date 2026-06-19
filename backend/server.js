@@ -172,8 +172,10 @@ const DEFINED_VILLAGES = [
 ];
 
 function parseDashFilters(query) {
-  const area      = DEFINED_AREAS.includes(query.area)       ? query.area      : null;
-  const village   = DEFINED_VILLAGES.includes(query.village) ? query.village : null;
+  const area = typeof query.area === 'string' && query.area.trim()
+    ? query.area.trim() : null;
+  const village = typeof query.village === 'string' && query.village.trim()
+    ? query.village.trim() : null;
   const formation = typeof query.formation === 'string' && query.formation.trim()
     ? query.formation.trim() : null;
   const unit      = typeof query.unit === 'string' && query.unit.trim()
@@ -282,10 +284,22 @@ app.get('/api/filter-options', requireAuth, async (_req, res) => {
       WHERE unit IS NOT NULL AND unit != ''
       ORDER BY val
     `);
+    const [areaRows] = await pool.query(`
+      SELECT DISTINCT area AS val FROM civilians
+      WHERE area IS NOT NULL AND area != ''
+      ORDER BY val
+    `);
+    const [villageRows] = await pool.query(`
+      SELECT DISTINCT village AS val FROM civilians
+      WHERE village IS NOT NULL AND village != ''
+      ORDER BY val
+    `);
     res.json({
       success: true,
       formations: formRows.map(r => r.val),
       units: unitRows.map(r => r.val),
+      areas: areaRows.map(r => r.val),
+      villages: villageRows.map(r => r.val),
     });
   } catch (e) {
     console.error(e);
@@ -348,9 +362,9 @@ app.get('/api/stats', requireAuth, async (req, res) => {
       WHERE area IS NOT NULL AND area != ''
       ${f.and}
       GROUP BY area
+      ORDER BY cnt DESC, area ASC
     `, f.params);
-    const areaMap = Object.fromEntries(rawArea.map(r => [r.area, Number(r.cnt)]));
-    const area = DEFINED_AREAS.map(a => ({ label: a, count: areaMap[a] || 0 }));
+    const area = rawArea.map(r => ({ label: r.area, count: Number(r.cnt) }));
 
     // Village-wise
     const [rawVillage] = await pool.query(`
@@ -358,9 +372,9 @@ app.get('/api/stats', requireAuth, async (req, res) => {
       WHERE village IS NOT NULL AND village != ''
       ${f.and}
       GROUP BY village
+      ORDER BY cnt DESC, village ASC
     `, f.params);
-    const villageMap = Object.fromEntries(rawVillage.map(r => [r.village, Number(r.cnt)]));
-    const village = DEFINED_VILLAGES.map(v => ({ label: v, count: villageMap[v] || 0 }));
+    const village = rawVillage.map(r => ({ label: r.village, count: Number(r.cnt) }));
 
     res.json({
       success: true,
@@ -602,6 +616,7 @@ async function initDirectoryTable() {
       designation VARCHAR(255) DEFAULT NULL,
       village VARCHAR(255) DEFAULT NULL,
       area VARCHAR(255) DEFAULT NULL,
+      created_by VARCHAR(64) DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_dir_name (name),
@@ -609,6 +624,15 @@ async function initDirectoryTable() {
       INDEX idx_dir_village (village)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
+  const [cols] = await pool.query(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'civil_directory'`
+  );
+  const names = new Set(cols.map(c => c.COLUMN_NAME));
+  if (!names.has('created_by')) {
+    await pool.query('ALTER TABLE civil_directory ADD COLUMN created_by VARCHAR(64) DEFAULT NULL');
+    console.log('Added civil_directory.created_by column');
+  }
 }
 
 function validateDirectoryBody(body) {
@@ -645,7 +669,7 @@ app.get('/api/directory', requireAuth, async (req, res) => {
         ORDER BY name ASC
       `, Array(5).fill(like));
     }
-    res.json({ success: true, records });
+    res.json({ success: true, records: withEditFlags(records, req.session.userId) });
   } catch (e) {
     console.error(e);
     res.json({ success: false, message: 'Directory load error' });
@@ -656,7 +680,7 @@ app.get('/api/directory/:id', requireAuth, async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM civil_directory WHERE id = ? LIMIT 1', [req.params.id]);
     if (!rows.length) return res.json({ success: false, message: 'Entry not found.' });
-    res.json({ success: true, record: rows[0] });
+    res.json({ success: true, record: withEditFlag(rows[0], req.session.userId) });
   } catch (e) {
     console.error(e);
     res.json({ success: false, message: 'Directory load error' });
@@ -667,10 +691,11 @@ app.post('/api/directory', requireAuth, async (req, res) => {
   try {
     const v = validateDirectoryBody(req.body);
     if (v.error) return res.json({ success: false, message: v.error });
+    const created_by = req.session.userId || null;
     const [result] = await pool.query(`
-      INSERT INTO civil_directory (name, mobile, designation, village, area)
-      VALUES (?, ?, ?, ?, ?)
-    `, [v.name, v.mobile, v.designation, v.village, v.area]);
+      INSERT INTO civil_directory (name, mobile, designation, village, area, created_by)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [v.name, v.mobile, v.designation, v.village, v.area, created_by]);
     res.json({ success: true, message: 'Directory entry added.', id: result.insertId });
   } catch (e) {
     console.error(e);
@@ -681,8 +706,9 @@ app.post('/api/directory', requireAuth, async (req, res) => {
 app.put('/api/directory/:id', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const [existing] = await pool.query('SELECT id FROM civil_directory WHERE id = ? LIMIT 1', [id]);
+    const [existing] = await pool.query('SELECT * FROM civil_directory WHERE id = ? LIMIT 1', [id]);
     if (!existing.length) return res.json({ success: false, message: 'Entry not found.' });
+    if (!denyUnlessOwner(existing[0], req.session.userId, res)) return;
     const v = validateDirectoryBody(req.body);
     if (v.error) return res.json({ success: false, message: v.error });
     await pool.query(`
@@ -699,8 +725,9 @@ app.put('/api/directory/:id', requireAuth, async (req, res) => {
 app.delete('/api/directory/:id', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const [rows] = await pool.query('SELECT id FROM civil_directory WHERE id = ? LIMIT 1', [id]);
+    const [rows] = await pool.query('SELECT * FROM civil_directory WHERE id = ? LIMIT 1', [id]);
     if (!rows.length) return res.json({ success: false, message: 'Entry not found.' });
+    if (!denyUnlessOwner(rows[0], req.session.userId, res)) return;
     await pool.query('DELETE FROM civil_directory WHERE id = ?', [id]);
     res.json({ success: true, message: 'Directory entry deleted.' });
   } catch (e) {

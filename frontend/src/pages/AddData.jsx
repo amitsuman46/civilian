@@ -8,7 +8,6 @@ import { useAuth }    from '../context/AuthContext';
 import API from '../api';
 
 const OCCUPATIONS    = ['Farmer','Teacher','Engineer','Doctor','Businessman','Driver','Tailor','Nurse','Homemaker','Labourer','Government Employee','Self-Employed','Student','Retired','Other'];
-const AREAS          = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
 const COMMUNITIES    = ['Dogras','Gujjars','Bakarwals','Paharis','Others'];
 const RELIGIONS      = ['Islam','Hinduism','Sikhism','Christianity','Buddhism','Jainism','Other'];
 
@@ -212,8 +211,17 @@ export default function AddData() {
                   maxLength={100}
                 />
               </div>
+              <div className="form-group">
+                <label>Area / Zone</label>
+                <input
+                  type="text"
+                  value={form.area}
+                  onChange={e => set('area', e.target.value)}
+                  placeholder="e.g. Poonch"
+                  maxLength={100}
+                />
+              </div>
               {[
-                { label:'Area / Zone',    field:'area',    opts: AREAS },
                 { label:'Occupation',     field:'occupation', opts: OCCUPATIONS },
                 { label:'Community',      field:'community',  opts: COMMUNITIES },
                 { label:'Religion',       field:'religion',   opts: RELIGIONS },
