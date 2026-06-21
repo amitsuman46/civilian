@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import './style.css';
 import App from './App';
 import 'leaflet/dist/leaflet.css';
+import '@maptiler/sdk/dist/maptiler-sdk.css';
 import L from 'leaflet';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon   from 'leaflet/dist/images/marker-icon.png';

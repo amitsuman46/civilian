@@ -1,7 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap } from 'react-leaflet';
+import { MapContainer, Marker, Popup, GeoJSON, useMap } from 'react-leaflet';
 import MapResize from '../components/MapResize';
+import MapTilerBasemap from '../components/MapTilerBasemap';
+import MapStyleToggle from '../components/MapStyleToggle';
+import { MAP_MAX_ZOOM, MAP_PIN_ZOOM, DEFAULT_MAP_STYLE } from '../config/maptiler';
 import API from '../api';
 
 function AutoFit({ pin, polygon }) {
@@ -14,7 +17,7 @@ function AutoFit({ pin, polygon }) {
       coords.forEach(([lng, lat]) => bounds.push([lat, lng]));
       if (bounds.length > 1) { map.fitBounds(bounds, { padding: [40, 40] }); return; }
     }
-    if (pin) { map.setView(pin, 15); return; }
+    if (pin) { map.setView(pin, MAP_PIN_ZOOM); return; }
     if (polygon) {
       const coords = polygon.geometry?.coordinates?.[0] || polygon.features?.[0]?.geometry?.coordinates?.[0] || [];
       if (coords.length) {
@@ -36,6 +39,7 @@ export default function FullReport() {
   const { id } = useParams();
   const [rec, setRec]   = useState(null);
   const [notFound, setNotFound] = useState(false);
+  const [mapStyle, setMapStyle] = useState(DEFAULT_MAP_STYLE);
 
   useEffect(() => {
     API.get(`/api/civilians/${id}`).then(data => {
@@ -180,22 +184,23 @@ export default function FullReport() {
             <div className="card mb-2">
               <div className="card-header">
                 <h3><i className="fas fa-map-location-dot"></i> Mapped Location</h3>
-                <span className="badge badge-primary" style={{ fontSize: '.75rem' }}>{mapLabel}</span>
+                <div className="dash-chart-header-actions">
+                  <MapStyleToggle value={mapStyle} onChange={setMapStyle} />
+                  <span className="badge badge-primary" style={{ fontSize: '.75rem' }}>{mapLabel}</span>
+                </div>
               </div>
               <div className="card-body" style={{ padding: 0, overflow: 'hidden', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)' }}>
                 <MapContainer
                   center={pin || [20.5937, 78.9629]}
-                  zoom={pin ? 15 : 5}
+                  zoom={pin ? MAP_PIN_ZOOM : 5}
+                  maxZoom={MAP_MAX_ZOOM}
                   style={{ height: '340px', width: '100%' }}
                   scrollWheelZoom={false}
                   zoomControl={true}
                   dragging={true}
                 >
                   <MapResize />
-                  <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
-                  />
+                  <MapTilerBasemap style={mapStyle} />
                   <AutoFit pin={pin} polygon={polygon} />
                   {pin && (
                     <Marker position={pin}>

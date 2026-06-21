@@ -1,58 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, Popup, GeoJSON, useMapEvents } from 'react-leaflet';
 import MapResize from './MapResize';
+import MapTilerBasemap from './MapTilerBasemap';
+import MapStyleToggle from './MapStyleToggle';
+import { MAP_MAX_ZOOM, MAP_PIN_ZOOM, DEFAULT_MAP_STYLE } from '../config/maptiler';
 import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 
 /** India center — biases search toward subcontinent */
 const DEFAULT_CENTER = [20.5937, 78.9629];
 const DEFAULT_ZOOM  = 5;
-const PIN_ZOOM      = 18;
-
-const TILES = {
-  /** OSM standard — shows building footprints (gray blocks) at high zoom */
-  buildings: {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    subdomains: 'abc',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxNativeZoom: 19,
-    maxZoom: 19,
-  },
-  detailed: {
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    subdomains: 'abcd',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    maxNativeZoom: 20,
-    maxZoom: 20,
-  },
-  terrain: {
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    subdomains: 'abc',
-    attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a> contributors',
-    maxNativeZoom: 17,
-    maxZoom: 17,
-  },
-  satellite: {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA',
-    maxNativeZoom: 18,
-    maxZoom: 18,
-  },
-  hybridLabels: {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-    attribution: '',
-    maxNativeZoom: 17,
-    maxZoom: 17,
-  },
-};
-
-const TILE_BUTTONS = [
-  ['buildings', 'Buildings'],
-  ['detailed', 'Detailed'],
-  ['hybrid', 'Hybrid'],
-  ['terrain', 'Terrain'],
-  ['satellite', 'Satellite'],
-];
+const PIN_ZOOM      = MAP_PIN_ZOOM;
 
 function formatPhotonLabel(p) {
   const parts = [
@@ -144,46 +102,11 @@ function ClickHandler({ onMapClick }) {
   return null;
 }
 
-function MapTileLayer({ layerKey }) {
-  if (layerKey === 'hybrid') {
-    const sat = TILES.satellite;
-    const lbl = TILES.hybridLabels;
-    return (
-      <>
-        <TileLayer
-          url={sat.url}
-          attribution={sat.attribution}
-          maxZoom={sat.maxZoom}
-          maxNativeZoom={sat.maxNativeZoom}
-        />
-        <TileLayer
-          url={lbl.url}
-          attribution={lbl.attribution}
-          maxZoom={lbl.maxZoom}
-          maxNativeZoom={lbl.maxNativeZoom}
-          opacity={0.9}
-        />
-      </>
-    );
-  }
-  const t = TILES[layerKey] || TILES.buildings;
-  return (
-    <TileLayer
-      key={layerKey}
-      url={t.url}
-      attribution={t.attribution}
-      subdomains={t.subdomains}
-      maxZoom={t.maxZoom}
-      maxNativeZoom={t.maxNativeZoom}
-    />
-  );
-}
-
 export default function MapPicker({ lat, lng, polygon, onChange }) {
   const mapRef        = useRef(null);
   const searchWrapRef = useRef(null);
   const debounceRef   = useRef(null);
-  const [tileLayer, setTileLayer]     = useState('buildings');
+  const [mapStyle, setMapStyle]       = useState(DEFAULT_MAP_STYLE);
   const [pin, setPin]                 = useState(lat && lng ? [lat, lng] : null);
   const [polyState, setPolyState]     = useState(polygon || null);
   const [gpsLoading, setGpsLoading]   = useState(false);
@@ -200,11 +123,6 @@ export default function MapPicker({ lat, lng, polygon, onChange }) {
     : lat && lng
       ? { lat, lng }
       : { lat: DEFAULT_CENTER[0], lng: DEFAULT_CENTER[1] };
-
-  const activeTile = TILES[tileLayer === 'hybrid' ? 'satellite' : tileLayer] || TILES.buildings;
-  const mapMaxZoom = tileLayer === 'hybrid'
-    ? Math.min(TILES.satellite.maxZoom, TILES.hybridLabels.maxZoom)
-    : activeTile.maxZoom;
 
   useEffect(() => {
     if (!mapRef.current || !lat || !lng) return;
@@ -398,18 +316,7 @@ export default function MapPicker({ lat, lng, polygon, onChange }) {
   return (
     <div className="map-picker">
       <div className="map-picker-controls">
-        <div className="tab-switcher map-picker-tiles">
-          {TILE_BUTTONS.map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              className={`tab-btn${tileLayer === key ? ' active' : ''}`}
-              onClick={() => setTileLayer(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <MapStyleToggle value={mapStyle} onChange={setMapStyle} className="map-picker-tiles" />
 
         <div className="map-search-wrap" ref={searchWrapRef}>
           <div className="map-search-bar">
@@ -476,13 +383,13 @@ export default function MapPicker({ lat, lng, polygon, onChange }) {
 
       <p className="map-picker-hint">
         <i className="fas fa-circle-info"></i>
-        Use <strong>Buildings</strong> layer and zoom in to see house blocks (where mapped). Search accepts partial names.
+        Switch between <strong>Normal</strong> and <strong>Satellite</strong> views. Search accepts partial place names.
       </p>
 
       <MapContainer
         center={pin || DEFAULT_CENTER}
         zoom={pin ? PIN_ZOOM : DEFAULT_ZOOM}
-        maxZoom={mapMaxZoom}
+        maxZoom={MAP_MAX_ZOOM}
         style={{ height: '380px', width: '100%', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}
         scrollWheelZoom={false}
         ref={(map) => {
@@ -493,7 +400,7 @@ export default function MapPicker({ lat, lng, polygon, onChange }) {
         }}
       >
         <MapResize />
-        <MapTileLayer layerKey={tileLayer} />
+        <MapTilerBasemap style={mapStyle} />
         <ClickHandler onMapClick={handleMapClick} />
         {pin && (
           <Marker position={pin}>

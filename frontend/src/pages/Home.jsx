@@ -1,7 +1,10 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, Marker, Popup } from 'react-leaflet';
 import MapResize from '../components/MapResize';
+import MapTilerBasemap, { refreshMapTilerLayer } from '../components/MapTilerBasemap';
+import MapStyleToggle from '../components/MapStyleToggle';
+import { MAP_MAX_ZOOM, DEFAULT_MAP_STYLE } from '../config/maptiler';
 import {
   Chart as ChartJS,
   CategoryScale, LinearScale,
@@ -129,9 +132,15 @@ export default function Home() {
   const [units, setUnits]           = useState([]);
   const [areas, setAreas]           = useState([]);
   const [villages, setVillages]     = useState([]);
+  const [mapStyle, setMapStyle]     = useState(DEFAULT_MAP_STYLE);
   const [stickyVisible, setStickyVisible] = useState(false);
 
   const filterBarRef = useRef(null);
+  const mapLayerRef = useRef(null);
+
+  const refreshDashboardMap = useCallback(() => {
+    if (mapLayerRef.current) refreshMapTilerLayer(mapLayerRef.current);
+  }, []);
 
   const hour     = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -405,7 +414,10 @@ export default function Home() {
       <div className="dash-chart-card" style={{ marginBottom: '1rem' }}>
         <div className="dash-chart-header">
           <div className="dash-chart-title"><i className="fas fa-map-location-dot"></i> Civilian Locations</div>
-          <span className="dash-chart-badge">{mapPins.length} pinned{hasActiveFilters ? ' (filtered)' : ''}</span>
+          <div className="dash-chart-header-actions">
+            <MapStyleToggle value={mapStyle} onChange={setMapStyle} />
+            <span className="dash-chart-badge">{mapPins.length} pinned{hasActiveFilters ? ' (filtered)' : ''}</span>
+          </div>
         </div>
 
         {mapPins.length === 0 ? (
@@ -421,13 +433,14 @@ export default function Home() {
           <MapContainer
             center={MAP_DEFAULT_CENTER}
             zoom={MAP_DEFAULT_ZOOM}
+            maxZoom={MAP_MAX_ZOOM}
             style={{ height: '380px', width: '100%', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)' }}
             scrollWheelZoom={true}
           >
-            <MapResize />
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
+            <MapResize onResize={refreshDashboardMap} />
+            <MapTilerBasemap
+              style={mapStyle}
+              onLayerReady={(layer) => { mapLayerRef.current = layer; }}
             />
             {mapPins.map(pin => (
               <Marker key={pin.id} position={[pin.lat, pin.lng]}>
