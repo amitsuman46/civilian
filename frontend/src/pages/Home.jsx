@@ -350,6 +350,9 @@ export default function Home() {
 
       {/* Welcome Banner */}
       <div className="dash-welcome">
+        <div className="dash-welcome-flag" aria-hidden="true">
+          <img src="/images/flag-india.png" alt="" draggable="false" />
+        </div>
         <div className="dash-welcome-text">
           <div className="dash-greeting"><i className="fas fa-shield-halved"></i> &nbsp;Digital Demographic Profiling</div>
           <div className="dash-name">{greeting}, {user?.user_name}</div>
