@@ -14,6 +14,20 @@ const NAV_ITEMS = [
   { key: 'about',   path: '/dashboard/about',   icon: 'fa-circle-info',   label: 'About' },
 ];
 
+function NavLinkItems({ variant, isActive, onNavigate }) {
+  return NAV_ITEMS.map(item => (
+    <li key={`${variant}-${item.key}`}>
+      <Link
+        to={item.path}
+        className={`nav-link${isActive(item.path) ? ' active' : ''}`}
+        onClick={onNavigate}
+      >
+        <i className={`fas ${item.icon}`}></i> {item.label}
+      </Link>
+    </li>
+  ));
+}
+
 export default function Navbar() {
   const { user, logout } = useAuth();
   const showToast        = useToast();
@@ -45,55 +59,61 @@ export default function Navbar() {
     return location.pathname.startsWith(path);
   };
 
+  const closeMenu = () => setOpen(false);
+
   return (
     <nav className="navbar" id="mainNav">
-      <div className="nav-container">
-        <Link to="/dashboard" className="nav-brand">
-          <div className="nav-brand-icon"><i className="fas fa-shield-halved"></i></div>
-          <span>Civilian&nbsp;DBMS</span>
-        </Link>
+      <div className="nav-header">
+        <div className="nav-container">
+          <Link to="/dashboard" className="nav-brand">
+            <div className="nav-brand-icon"><i className="fas fa-shield-halved"></i></div>
+            <span>Digital&nbsp;Demographic&nbsp;Profiling</span>
+          </Link>
 
-        <button
-          className="nav-toggle"
-          id="navToggle"
-          onClick={() => setOpen(o => !o)}
-          aria-label="Toggle menu"
-          aria-expanded={open}
-        >
-          <span /><span /><span />
-        </button>
+          <ul className="nav-links nav-links--inline">
+            <NavLinkItems variant="inline" isActive={isActive} />
+          </ul>
 
-        <ul className={`nav-links${open ? ' open' : ''}`} id="navLinks">
-          {NAV_ITEMS.map(item => (
-            <li key={item.key}>
-              <Link
-                to={item.path}
-                className={`nav-link${isActive(item.path) ? ' active' : ''}`}
-                onClick={() => setOpen(false)}
-              >
-                <i className={`fas ${item.icon}`}></i> {item.label}
-              </Link>
-            </li>
-          ))}
-          <li className="nav-mobile-footer">
-            <div className="nav-mobile-user">
-              <div className="nav-user-avatar">{initials}</div>
-              <span className="nav-mobile-user-name">{user?.user_name}</span>
-            </div>
-            <button type="button" className="btn-logout btn-logout--mobile" onClick={() => { setOpen(false); handleLogout(); }}>
+          <button
+            className="nav-toggle"
+            id="navToggle"
+            onClick={() => setOpen(o => !o)}
+            aria-label="Toggle menu"
+            aria-expanded={open}
+          >
+            <span /><span /><span />
+          </button>
+
+          <div className="nav-user">
+            <div className="nav-user-avatar">{initials}</div>
+            <span className="nav-user-name">{user?.user_name}</span>
+            <button className="btn-logout" onClick={handleLogout}>
               <i className="fas fa-power-off"></i> Logout
             </button>
-          </li>
-        </ul>
-
-        <div className="nav-user">
-          <div className="nav-user-avatar">{initials}</div>
-          <span className="nav-user-name">{user?.user_name}</span>
-          <button className="btn-logout" onClick={handleLogout}>
-            <i className="fas fa-power-off"></i> Logout
-          </button>
+          </div>
         </div>
       </div>
+
+      <div className="nav-subbar" aria-label="Main navigation">
+        <div className="nav-subbar-inner">
+          <ul className="nav-links nav-links--subbar">
+            <NavLinkItems variant="subbar" isActive={isActive} />
+          </ul>
+        </div>
+      </div>
+
+      <ul className={`nav-links nav-links--drawer${open ? ' open' : ''}`} id="navLinks">
+        <NavLinkItems variant="drawer" isActive={isActive} onNavigate={closeMenu} />
+        <li className="nav-mobile-footer">
+          <div className="nav-mobile-user">
+            <div className="nav-user-avatar">{initials}</div>
+            <span className="nav-mobile-user-name">{user?.user_name}</span>
+          </div>
+          <button type="button" className="btn-logout btn-logout--mobile" onClick={() => { setOpen(false); handleLogout(); }}>
+            <i className="fas fa-power-off"></i> Logout
+          </button>
+        </li>
+      </ul>
     </nav>
   );
 }

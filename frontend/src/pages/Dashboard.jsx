@@ -56,7 +56,7 @@ export default function Dashboard() {
       {/* Footer */}
       <footer className="site-footer">
         <div className="container">
-          &copy; {new Date().getFullYear()} &nbsp;Civilian Database Management System &nbsp;·&nbsp; All Rights Reserved
+          &copy; {new Date().getFullYear()} &nbsp;Digital Demographic Profiling &nbsp;·&nbsp; All Rights Reserved
         </div>
       </footer>
     </div>

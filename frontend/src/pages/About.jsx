@@ -45,7 +45,7 @@ export default function About() {
       <div className="about-identity">
         <div className="about-identity-icon"><i className="fas fa-shield-halved"></i></div>
         <div className="about-identity-text">
-          <div className="about-identity-title">Civilian Database Management System</div>
+          <div className="about-identity-title">Digital Demographic Profiling</div>
           <div className="about-identity-sub">
             A secure, field-ready platform for registering and managing civilian records —
             built for local administrators, field officers, and community workers.

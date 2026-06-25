@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   Civilian DBMS  ·  Professional UI  ·  v2.0
+   Digital Demographic Profiling  ·  Professional UI  ·  v2.0
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Google Fonts ────────────────────────────────────────────── */
@@ -42,7 +42,10 @@
   /* Nav */
   --nav-bg:           #0f172a;
   --nav-height:       66px;
-  --nav-mobile-bp:    1280px;
+  --nav-subbar-height: 0px;
+  --nav-stack-height: calc(var(--nav-height) + var(--nav-subbar-height));
+  --nav-mobile-bp:    768px;
+  --nav-tablet-bp:    1280px;
 
   /* Shadows */
   --shadow-xs:  0 1px 2px 0 rgba(0,0,0,.05);
@@ -76,11 +79,40 @@ body {
   font-size: 0.9375rem;
   line-height: 1.6;
   color: var(--text);
-  background: var(--bg);
+  background-color: var(--bg);
   min-height: 100vh;
   width: 100%;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  position: relative;
+  isolation: isolate;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background: url('/images/mountains-far.jpg') center 65% / cover no-repeat;
+  opacity: 0.2;
+  filter: saturate(0.85);
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(241, 245, 249, 0.88) 0%,
+      rgba(241, 245, 249, 0.78) 38%,
+      rgba(241, 245, 249, 0.58) 68%,
+      rgba(241, 245, 249, 0.65) 100%
+    ),
+    url('/images/mountains-near.jpg') center bottom / cover no-repeat;
+  background-attachment: fixed, fixed;
 }
 
 #root {
@@ -134,9 +166,13 @@ h1,h2,h3,h4,h5,h6 {
   z-index: 1000;
   width: 100%;
   background: var(--nav-bg);
-  height: var(--nav-height);
+  height: var(--nav-stack-height);
   border-bottom: 1px solid rgba(255,255,255,.06);
   backdrop-filter: blur(8px);
+}
+
+.nav-header {
+  height: var(--nav-height);
 }
 
 .nav-container {
@@ -184,7 +220,60 @@ h1,h2,h3,h4,h5,h6 {
   display: flex;
   list-style: none;
   gap: 2px;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-links--inline {
   margin: 0 auto;
+}
+
+.nav-links--subbar,
+.nav-links--drawer {
+  display: none;
+}
+
+/* Tablet sub-navigation — always visible, horizontally scrollable */
+.nav-subbar {
+  display: none;
+  border-top: 1px solid rgba(255,255,255,.06);
+  background: #151f32;
+  height: var(--nav-subbar-height);
+}
+
+.nav-subbar-inner {
+  max-width: 1400px;
+  height: 100%;
+  margin: 0 auto;
+  padding: 0.45rem 1.25rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  mask-image: linear-gradient(90deg, transparent, #000 1.25rem, #000 calc(100% - 1.25rem), transparent);
+}
+
+.nav-subbar-inner::-webkit-scrollbar { display: none; }
+
+.nav-links--subbar {
+  display: flex;
+  gap: 0.35rem;
+  width: max-content;
+  min-width: 100%;
+  justify-content: safe center;
+  height: 100%;
+  align-items: center;
+}
+
+.nav-links--subbar .nav-link {
+  padding: 0.38rem 0.8rem;
+  font-size: 0.78rem;
+  border-radius: var(--radius-full);
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.07);
+}
+
+.nav-links--subbar .nav-link.active {
+  border-color: transparent;
 }
 
 .nav-link {
@@ -824,7 +913,7 @@ h1,h2,h3,h4,h5,h6 {
   border: 1px solid var(--border);
   overflow: hidden;
   position: sticky;
-  top: calc(var(--nav-height) + 1rem);
+  top: calc(var(--nav-stack-height) + 1rem);
 }
 
 .report-photo-wrap { padding: 2rem 1.5rem 1rem; text-align: center; }
@@ -1081,7 +1170,7 @@ h1,h2,h3,h4,h5,h6 {
    ════════════════════════════════════════════════════════════════ */
 .toast-container {
   position: fixed;
-  top: calc(var(--nav-height) + 0.75rem);
+  top: calc(var(--nav-stack-height) + 0.75rem);
   right: 1rem;
   z-index: 9000;
   display: flex;
@@ -1220,7 +1309,8 @@ h1,h2,h3,h4,h5,h6 {
   background:
     radial-gradient(circle at 20% 20%, rgba(29,78,216,.35) 0%, transparent 50%),
     radial-gradient(circle at 80% 80%, rgba(15,23,42,.6) 0%, transparent 50%),
-    linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0f172a 100%);
+    linear-gradient(135deg, rgba(15,23,42,.82) 0%, rgba(30,58,138,.72) 50%, rgba(15,23,42,.85) 100%),
+    url('/images/mountains-near.jpg') center bottom / cover no-repeat;
 }
 .login-body::after {
   content: '';
@@ -1476,12 +1566,32 @@ h1,h2,h3,h4,h5,h6 {
   .about-metrics { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* Collapsed nav — 8 items need ~1280px; touch devices always use menu */
-@media (max-width: 1280px), (hover: none) and (pointer: coarse) {
-  .nav-links {
+/* Tablet — visible sub-nav row below header */
+@media (min-width: 768px) and (max-width: 1280px) {
+  :root { --nav-subbar-height: 50px; }
+
+  .nav-brand { font-size: 0.92rem; }
+
+  .nav-subbar { display: block; }
+
+  .nav-links--inline { display: none; }
+  .nav-links--drawer { display: none !important; }
+  .nav-toggle { display: none; }
+
+  .nav-user-name { display: none; }
+  .nav-user { margin-left: auto; }
+  .btn-logout { padding: 0.4rem 0.85rem; font-size: 0.72rem; }
+}
+
+/* Mobile — hamburger drawer */
+@media (max-width: 767px) {
+  .nav-links--inline { display: none; }
+  .nav-subbar { display: none; }
+
+  .nav-links--drawer {
     display: none;
     position: absolute;
-    top: var(--nav-height);
+    top: var(--nav-stack-height);
     left: 0;
     right: 0;
     background: #1e293b;
@@ -1493,12 +1603,11 @@ h1,h2,h3,h4,h5,h6 {
     z-index: 999;
     max-height: calc(100dvh - var(--nav-height));
     overflow-y: auto;
-    margin: 0;
   }
-  .nav-links.open { display: flex; }
+
+  .nav-links--drawer.open { display: flex; }
   .nav-toggle { display: flex; }
   .nav-user { display: none; }
-  .navbar { position: sticky; }
 
   .nav-mobile-footer {
     display: flex;
@@ -1509,17 +1618,20 @@ h1,h2,h3,h4,h5,h6 {
     border-top: 1px solid rgba(255,255,255,.1);
     list-style: none;
   }
+
   .nav-mobile-user {
     display: flex;
     align-items: center;
     gap: 0.65rem;
     padding: 0.25rem 0.5rem;
   }
+
   .nav-mobile-user-name {
     color: #cbd5e1;
     font-size: 0.85rem;
     font-weight: 600;
   }
+
   .btn-logout--mobile {
     width: 100%;
     justify-content: center;
@@ -1550,6 +1662,7 @@ h1,h2,h3,h4,h5,h6 {
   .navbar, .breadcrumb-bar, .page-actions, .site-footer,
   .cc-actions, .form-actions-bar, .btn-logout { display: none !important; }
   body { background: #fff; }
+  body::before, body::after { display: none; }
   .card, .civilian-card, .report-sidebar { box-shadow: none; border: 1px solid #ddd; }
 }
 
@@ -1557,7 +1670,22 @@ h1,h2,h3,h4,h5,h6 {
    HOME / DASHBOARD PAGE  (ported from home.php inline styles)
    ════════════════════════════════════════════════════════════════ */
 .dash-welcome {
-  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 50%, #1e3a8a 100%);
+  background-color: #0f172a;
+  background-image:
+    radial-gradient(ellipse 90% 80% at 0% 0%,   rgba(99, 102, 241, .42) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 90% at 100% 100%, rgba(37, 99, 235, .32) 0%, transparent 50%),
+    radial-gradient(ellipse 55% 55% at 88% 12%,  rgba(168, 85, 247, .22) 0%, transparent 50%),
+    radial-gradient(ellipse 40% 60% at 55% 110%, rgba(56, 189, 248, .14) 0%, transparent 55%),
+    linear-gradient(
+      128deg,
+      #0c1222 0%,
+      #131a35 16%,
+      #1a237e 38%,
+      #1d4ed8 62%,
+      #2563eb 82%,
+      #3b82f6 100%
+    );
+  border: 1px solid rgba(255, 255, 255, .09);
   border-radius: var(--radius-lg);
   padding: 1.75rem 2rem;
   display: flex;
@@ -1565,25 +1693,30 @@ h1,h2,h3,h4,h5,h6 {
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.5rem;
-  box-shadow: 0 4px 24px rgba(29,78,216,.25);
+  box-shadow:
+    0 4px 24px rgba(15, 23, 42, .28),
+    0 12px 40px rgba(29, 78, 216, .22),
+    inset 0 1px 0 rgba(255, 255, 255, .12);
   position: relative;
   overflow: hidden;
 }
 .dash-welcome::before {
   content: '';
   position: absolute;
-  top: -40px; right: -40px;
-  width: 180px; height: 180px;
+  top: -50px; right: -30px;
+  width: 220px; height: 220px;
   border-radius: 50%;
-  background: rgba(255,255,255,.06);
+  background: radial-gradient(circle, rgba(255, 255, 255, .1) 0%, rgba(255, 255, 255, .03) 45%, transparent 70%);
+  pointer-events: none;
 }
 .dash-welcome::after {
   content: '';
   position: absolute;
-  bottom: -60px; right: 80px;
-  width: 240px; height: 240px;
+  bottom: -70px; right: 60px;
+  width: 280px; height: 280px;
   border-radius: 50%;
-  background: rgba(255,255,255,.04);
+  background: radial-gradient(circle, rgba(147, 197, 253, .08) 0%, rgba(255, 255, 255, .04) 40%, transparent 68%);
+  pointer-events: none;
 }
 .dash-welcome-text { position: relative; z-index: 1; }
 .dash-greeting {
@@ -1920,7 +2053,7 @@ h1,h2,h3,h4,h5,h6 {
 /* Sticky active-filter banner */
 .dash-filters-sticky {
   position: fixed;
-  top: var(--nav-height);
+  top: var(--nav-stack-height);
   left: 0;
   right: 0;
   z-index: 900;

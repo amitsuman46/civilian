@@ -128,6 +128,7 @@ export default function Home() {
   const [mapPins, setMapPins]     = useState([]);
   const [loading, setLoading]     = useState(true);
   const [filters, setFilters]     = useState({ area: '', village: '', formation: '', unit: '' });
+  const [pairs, setPairs]           = useState([]);
   const [formations, setFormations] = useState([]);
   const [units, setUnits]           = useState([]);
   const [areas, setAreas]           = useState([]);
@@ -149,15 +150,23 @@ export default function Home() {
   const hasActiveFilters = Boolean(filters.area || filters.village || filters.formation || filters.unit);
 
   useEffect(() => {
-    API.get('/api/filter-options').then(data => {
+    const params = new URLSearchParams();
+    if (filters.formation) params.set('formation', filters.formation);
+    if (filters.unit) params.set('unit', filters.unit);
+    const qs = params.toString();
+
+    API.get(`/api/filter-options${qs ? `?${qs}` : ''}`).then(data => {
       if (data.success) {
+        setPairs(data.pairs || []);
         setFormations(data.formations || []);
         setUnits(data.units || []);
-        setAreas(data.areas || []);
-        setVillages(data.villages || []);
+        if (!filters.formation && !filters.unit) {
+          setAreas(data.areas || []);
+          setVillages(data.villages || []);
+        }
       }
     });
-  }, []);
+  }, [filters.formation, filters.unit]);
 
   const fetchDashboard = useCallback(async (activeFilters) => {
     setLoading(true);
@@ -179,15 +188,44 @@ export default function Home() {
   useEffect(() => {
     const el = filterBarRef.current;
     if (!el) return;
-    const observer = new IntersectionObserver(
+
+    const navOffset = () => {
+      const h = document.getElementById('mainNav')?.offsetHeight ?? 66;
+      return `-${h}px 0px 0px 0px`;
+    };
+
+    let observer = new IntersectionObserver(
       ([entry]) => setStickyVisible(!entry.isIntersecting),
-      { threshold: 0, rootMargin: '-66px 0px 0px 0px' },
+      { threshold: 0, rootMargin: navOffset() },
     );
     observer.observe(el);
-    return () => observer.disconnect();
+
+    const onResize = () => {
+      observer.disconnect();
+      observer = new IntersectionObserver(
+        ([entry]) => setStickyVisible(!entry.isIntersecting),
+        { threshold: 0, rootMargin: navOffset() },
+      );
+      observer.observe(el);
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', onResize);
+    };
   }, []);
 
-  const handleFilterChange = next => setFilters(next);
+  const handleFilterChange = next => {
+    if (next.formation !== filters.formation && next.unit) {
+      const valid = pairs.some(p => p.formation === next.formation && p.unit === next.unit);
+      if (!valid) next = { ...next, unit: '' };
+    }
+    if (next.unit !== filters.unit && next.formation) {
+      const valid = pairs.some(p => p.formation === next.formation && p.unit === next.unit);
+      if (!valid) next = { ...next, formation: '' };
+    }
+    setFilters(next);
+  };
   const clearFilters = () => setFilters({ area: '', village: '', formation: '', unit: '' });
 
   const total = stats?.kpi?.total ?? 0;
@@ -313,7 +351,7 @@ export default function Home() {
       {/* Welcome Banner */}
       <div className="dash-welcome">
         <div className="dash-welcome-text">
-          <div className="dash-greeting"><i className="fas fa-shield-halved"></i> &nbsp;Civilian DBMS</div>
+          <div className="dash-greeting"><i className="fas fa-shield-halved"></i> &nbsp;Digital Demographic Profiling</div>
           <div className="dash-name">{greeting}, {user?.user_name}</div>
           <div className="dash-date">
             <i className="fas fa-calendar-days"></i>

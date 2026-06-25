@@ -41,7 +41,7 @@ export default function Login() {
         <div className="login-card">
           <div className="login-brand">
             <div className="login-logo"><i className="fas fa-shield-halved"></i></div>
-            <h1>Civilian DBMS</h1>
+            <h1>Digital Demographic Profiling</h1>
             <p>Secure Administration Portal</p>
           </div>
 
@@ -104,7 +104,7 @@ export default function Login() {
         </div>
 
         <div style={{ textAlign:'center', marginTop:'1.25rem', fontSize:'.72rem', fontWeight:600, color:'rgba(255,255,255,.3)', letterSpacing:'.06em', textTransform:'uppercase' }}>
-          Civilian DBMS &nbsp;v2.0 &nbsp;·&nbsp; Secure Cloud Deployment
+          Digital Demographic Profiling &nbsp;v2.0 &nbsp;·&nbsp; Secure Cloud Deployment
         </div>
       </div>
     </div>

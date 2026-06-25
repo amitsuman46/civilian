@@ -258,24 +258,39 @@ app.get('/api/me', (req, res) => {
 // STATS
 // ══════════════════════════════════════════════════════════════
 
-app.get('/api/filter-options', requireAuth, async (_req, res) => {
+app.get('/api/filter-options', requireAuth, async (req, res) => {
   try {
-    const [formRows] = await pool.query(`
-      SELECT DISTINCT formation AS val FROM civilians
-      WHERE formation IS NOT NULL AND formation != ''
-      UNION
-      SELECT DISTINCT formation AS val FROM users
-      WHERE formation IS NOT NULL AND formation != ''
-      ORDER BY val
+    const formation = typeof req.query.formation === 'string' && req.query.formation.trim()
+      ? req.query.formation.trim() : null;
+    const unit = typeof req.query.unit === 'string' && req.query.unit.trim()
+      ? req.query.unit.trim() : null;
+
+    const [pairRows] = await pool.query(`
+      SELECT DISTINCT formation, unit FROM (
+        SELECT formation, unit FROM civilians
+        WHERE formation IS NOT NULL AND formation != ''
+          AND unit IS NOT NULL AND unit != ''
+        UNION
+        SELECT formation, unit FROM users
+        WHERE formation IS NOT NULL AND formation != ''
+          AND unit IS NOT NULL AND unit != ''
+      ) AS fu
+      ORDER BY formation, unit
     `);
-    const [unitRows] = await pool.query(`
-      SELECT DISTINCT unit AS val FROM civilians
-      WHERE unit IS NOT NULL AND unit != ''
-      UNION
-      SELECT DISTINCT unit AS val FROM users
-      WHERE unit IS NOT NULL AND unit != ''
-      ORDER BY val
-    `);
+    const pairs = pairRows.map(r => ({ formation: r.formation, unit: r.unit }));
+
+    const formationSet = new Set();
+    const unitSet = new Set();
+    for (const p of pairs) {
+      if (unit && p.unit !== unit) continue;
+      if (formation && p.formation !== formation) continue;
+      formationSet.add(p.formation);
+      unitSet.add(p.unit);
+    }
+
+    const formations = [...formationSet].sort();
+    const units = [...unitSet].sort();
+
     const [areaRows] = await pool.query(`
       SELECT DISTINCT area AS val FROM civilians
       WHERE area IS NOT NULL AND area != ''
@@ -288,8 +303,9 @@ app.get('/api/filter-options', requireAuth, async (_req, res) => {
     `);
     res.json({
       success: true,
-      formations: formRows.map(r => r.val),
-      units: unitRows.map(r => r.val),
+      formations,
+      units,
+      pairs,
       areas: areaRows.map(r => r.val),
       villages: villageRows.map(r => r.val),
     });
