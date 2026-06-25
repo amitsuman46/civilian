@@ -45,7 +45,7 @@
   --nav-subbar-height: 0px;
   --nav-stack-height: calc(var(--nav-height) + var(--nav-subbar-height));
   --nav-mobile-bp:    768px;
-  --nav-tablet-bp:    1280px;
+  --nav-tablet-bp:    1920px;
 
   /* Shadows */
   --shadow-xs:  0 1px 2px 0 rgba(0,0,0,.05);
@@ -225,7 +225,10 @@ h1,h2,h3,h4,h5,h6 {
 }
 
 .nav-links--inline {
-  margin: 0 auto;
+  flex: 1 1 auto;
+  justify-content: center;
+  margin: 0;
+  min-width: 0;
 }
 
 .nav-links--subbar,
@@ -1568,10 +1571,12 @@ h1,h2,h3,h4,h5,h6 {
 }
 
 /* Tablet — visible sub-nav row below header */
-@media (min-width: 768px) and (max-width: 1280px) {
+@media (min-width: 768px) and (max-width: 1920px) {
   .navbar { height: auto; }
 
-  .nav-brand { font-size: 0.92rem; }
+  .nav-container { padding: 0 0.75rem; }
+
+  .nav-brand { font-size: 0.92rem; margin-right: 0.35rem; }
 
   .nav-subbar {
     display: block;
@@ -1580,8 +1585,10 @@ h1,h2,h3,h4,h5,h6 {
   }
 
   .nav-subbar-inner {
+    max-width: none;
+    width: 100%;
     height: auto;
-    padding: 0.55rem 1.25rem 0.65rem;
+    padding: 0.5rem 0.5rem 0.6rem;
     overflow: visible;
     mask-image: none;
   }
@@ -1593,16 +1600,18 @@ h1,h2,h3,h4,h5,h6 {
     max-width: 100%;
     height: auto;
     justify-content: center;
-    gap: 0.45rem;
-    row-gap: 0.4rem;
+    gap: 0.35rem;
+    row-gap: 0.35rem;
   }
 
   .nav-links--subbar .nav-link {
-    padding: 0.46rem 0.95rem;
-    font-size: 0.84rem;
+    padding: 0.42rem 0.72rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
-  .nav-links--subbar .nav-link i { font-size: 0.8rem; }
+  .nav-links--subbar .nav-link i { font-size: 0.76rem; }
 
   .nav-links--inline { display: none; }
   .nav-links--drawer { display: none !important; }
@@ -1610,7 +1619,25 @@ h1,h2,h3,h4,h5,h6 {
 
   .nav-user-name { display: none; }
   .nav-user { margin-left: auto; }
-  .btn-logout { padding: 0.4rem 0.85rem; font-size: 0.72rem; }
+  .btn-logout { padding: 0.38rem 0.75rem; font-size: 0.7rem; }
+}
+
+/* Large desktop — full-width bar, menu centred between brand and user */
+@media (min-width: 1921px) {
+  .nav-container {
+    max-width: none;
+    width: 100%;
+    padding: 0 0.85rem;
+  }
+
+  .nav-links--inline {
+    flex: 1 1 auto;
+    justify-content: center;
+    margin: 0;
+    min-width: 0;
+  }
+
+  .nav-user { flex: 0 0 auto; }
 }
 
 /* Mobile — hamburger drawer */
@@ -1638,6 +1665,11 @@ h1,h2,h3,h4,h5,h6 {
   .nav-links--drawer.open { display: flex; }
   .nav-toggle { display: flex; }
   .nav-user { display: none; }
+
+  .nav-links--drawer .nav-link {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
 
   .nav-mobile-footer {
     display: flex;
@@ -1668,15 +1700,6 @@ h1,h2,h3,h4,h5,h6 {
   }
 }
 
-/* Slightly compact labels between 1281px–1500px when desktop nav is shown */
-@media (min-width: 1281px) and (max-width: 1500px) {
-  .nav-link {
-    padding: 0.4rem 0.6rem;
-    font-size: 0.8rem;
-  }
-  .nav-user-name { display: none; }
-  .btn-logout { padding: 0.4rem 0.85rem; font-size: 0.72rem; }
-}
 
 @media (max-width: 520px) {
   .stat-grid { grid-template-columns: 1fr; }
@@ -2223,7 +2246,7 @@ h1,h2,h3,h4,h5,h6 {
   .dash-charts-row.two   { grid-template-columns: 1fr; }
   .dash-charts-row.equal { grid-template-columns: 1fr; }
 }
-@media (max-width: 1280px) and (min-width: 601px) {
+@media (max-width: 1920px) and (min-width: 601px) {
   .dash-welcome {
     min-height: 190px;
     padding: 1.65rem 1.5rem;
