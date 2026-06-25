@@ -285,7 +285,8 @@ h1,h2,h3,h4,h5,h6 {
   color: #94a3b8;
   font-size: 0.85rem;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   transition: all var(--speed) var(--ease);
   white-space: nowrap;
 }
@@ -1568,11 +1569,40 @@ h1,h2,h3,h4,h5,h6 {
 
 /* Tablet — visible sub-nav row below header */
 @media (min-width: 768px) and (max-width: 1280px) {
-  :root { --nav-subbar-height: 50px; }
+  .navbar { height: auto; }
 
   .nav-brand { font-size: 0.92rem; }
 
-  .nav-subbar { display: block; }
+  .nav-subbar {
+    display: block;
+    height: auto;
+    min-height: 50px;
+  }
+
+  .nav-subbar-inner {
+    height: auto;
+    padding: 0.55rem 1.25rem 0.65rem;
+    overflow: visible;
+    mask-image: none;
+  }
+
+  .nav-links--subbar {
+    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: auto;
+    justify-content: center;
+    gap: 0.45rem;
+    row-gap: 0.4rem;
+  }
+
+  .nav-links--subbar .nav-link {
+    padding: 0.46rem 0.95rem;
+    font-size: 0.84rem;
+  }
+
+  .nav-links--subbar .nav-link i { font-size: 0.8rem; }
 
   .nav-links--inline { display: none; }
   .nav-links--drawer { display: none !important; }
