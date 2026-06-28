@@ -1,6 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import API from '../api';
+import DashFilters from '../components/DashFilters';
+import { useDashFilters } from '../hooks/useDashFilters';
+import { appendFilterParams } from '../utils/dashFilters';
+import { exportViewDataExcel, exportViewDataPdf } from '../utils/exportViewData';
+import { useToast } from '../context/ToastContext';
 
 function fmtDate(str) {
   if (!str) return '—';
@@ -48,23 +53,73 @@ function CivilianCard({ r }) {
 export default function ViewData() {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [searchQ, setSearchQ] = useState('');
   const searchTimer           = useRef(null);
+  const showToast = useToast();
+  const {
+    filters,
+    formations,
+    units,
+    areas,
+    villages,
+    hasActiveFilters,
+    handleFilterChange,
+    clearFilters,
+    filterBadge,
+  } = useDashFilters();
 
-  const load = useCallback(async (q = '') => {
+  const load = useCallback(async (q = '', activeFilters = filters) => {
     setLoading(true);
-    const data = q
-      ? await API.get(`/api/search?q=${encodeURIComponent(q)}&mode=view`)
-      : await API.get('/api/civilians');
+    let data;
+    if (q) {
+      const params = appendFilterParams(new URLSearchParams(), activeFilters);
+      params.set('q', q);
+      params.set('mode', 'view');
+      data = await API.get(`/api/search?${params}`);
+    } else {
+      const params = appendFilterParams(new URLSearchParams(), activeFilters);
+      const qs = params.toString();
+      data = await API.get(`/api/civilians${qs ? `?${qs}` : ''}`);
+    }
     if (data.success) setRecords(data.records || []);
     setLoading(false);
-  }, []);
+  }, [filters]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(searchQ, filters); }, [filters, searchQ, load]);
 
   const handleSearch = (e) => {
     const q = e.target.value;
     clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => load(q), 350);
+    searchTimer.current = setTimeout(() => setSearchQ(q), 350);
+  };
+
+  const exportMeta = { filterLabel: filterBadge, searchQuery: searchQ };
+
+  const handleExportExcel = async () => {
+    if (!records.length) return;
+    setExporting(true);
+    try {
+      await exportViewDataExcel(records, exportMeta);
+      showToast('Excel file downloaded.', 'success');
+    } catch {
+      showToast('Failed to export Excel file.', 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!records.length) return;
+    setExporting(true);
+    try {
+      await exportViewDataPdf(records, exportMeta);
+      showToast('PDF file downloaded.', 'success');
+    } catch {
+      showToast('Failed to export PDF file.', 'error');
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -72,17 +127,56 @@ export default function ViewData() {
       <div className="page-header">
         <div>
           <div className="page-title"><i className="fas fa-table-list"></i> View Data</div>
-          <div className="page-subtitle">{records.length} civilian record(s) on file</div>
+          <div className="page-subtitle">
+            {records.length} civilian record(s){hasActiveFilters ? ' (filtered)' : ' on file'}
+          </div>
         </div>
         <div className="page-actions">
           <div className="search-bar">
             <i className="fas fa-magnifying-glass"></i>
             <input type="text" placeholder="Search by name, mobile, village…" autoComplete="off" onChange={handleSearch} />
           </div>
+          <button
+            type="button"
+            className="btn btn-outline-primary btn-sm"
+            onClick={handleExportExcel}
+            disabled={loading || exporting || records.length === 0}
+            title={records.length === 0 ? 'No records to export' : 'Export filtered records to Excel'}
+          >
+            <i className="fas fa-file-excel"></i> Excel
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline-primary btn-sm"
+            onClick={handleExportPdf}
+            disabled={loading || exporting || records.length === 0}
+            title={records.length === 0 ? 'No records to export' : 'Export filtered records to PDF'}
+          >
+            <i className="fas fa-file-pdf"></i> PDF
+          </button>
           <Link to="/dashboard/add" className="btn btn-primary btn-sm">
             <i className="fas fa-plus"></i> Add Record
           </Link>
         </div>
+      </div>
+
+      <div className="dash-filters-card">
+        <div className="dash-filters-card-header">
+          <div className="dash-filters-card-title">
+            <i className="fas fa-filter"></i> Global Filters
+          </div>
+          <span className="dash-chart-badge">{filterBadge}</span>
+        </div>
+        <DashFilters
+          filters={filters}
+          onChange={handleFilterChange}
+          onClear={clearFilters}
+          hasActive={hasActiveFilters}
+          formations={formations}
+          units={units}
+          areas={areas}
+          villages={villages}
+        />
       </div>
 
       {loading ? (
@@ -93,7 +187,11 @@ export default function ViewData() {
         <div className="empty-state">
           <i className="fas fa-users"></i>
           <h3>No Records Found</h3>
-          <p>Start by <Link to="/dashboard/add">adding a civilian record</Link>.</p>
+          <p>
+            {hasActiveFilters || searchQ
+              ? <>No records match the current filters. Try adjusting or clearing them.</>
+              : <>Start by <Link to="/dashboard/add">adding a civilian record</Link>.</>}
+          </p>
         </div>
       ) : (
         <div className="civilian-grid" id="civilianGrid">

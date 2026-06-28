@@ -403,7 +403,11 @@ app.get('/api/stats', requireAuth, async (req, res) => {
 // GET all
 app.get('/api/civilians', requireAuth, async (req, res) => {
   try {
-    const [records] = await pool.query('SELECT * FROM civilians ORDER BY created_at DESC');
+    const f = parseDashFilters(req.query);
+    const [records] = await pool.query(
+      `SELECT * FROM civilians ${f.where} ORDER BY created_at DESC`,
+      f.params
+    );
     res.json({ success: true, records: withEditFlags(records, req.session.userId) });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'DB error' });
@@ -748,23 +752,33 @@ app.get('/api/search', requireAuth, async (req, res) => {
   try {
     const q    = (req.query.q || '').trim();
     const mode = req.query.mode || 'update';
-    let records;
-    if (!q) {
-      [records] = await pool.query('SELECT * FROM civilians ORDER BY created_at DESC');
-    } else {
+    const f    = parseDashFilters(req.query);
+    const parts  = [];
+    const params = [];
+
+    if (q) {
       const like = `%${q}%`;
-      [records] = await pool.query(`
-        SELECT * FROM civilians
-        WHERE name LIKE ? OR mobile LIKE ? OR village LIKE ?
-           OR area LIKE ? OR occupation LIKE ? OR health_status LIKE ?
-           OR family_details LIKE ? OR house_no LIKE ?
-           OR community LIKE ? OR religion LIKE ?
-           OR immovable_property LIKE ? OR movable_property LIKE ?
-           OR CAST(salary AS CHAR) LIKE ? OR CAST(income AS CHAR) LIKE ?
-           OR CAST(expenditure AS CHAR) LIKE ?
-        ORDER BY created_at DESC
-      `, Array(14).fill(like));
+      parts.push(`(
+        name LIKE ? OR mobile LIKE ? OR village LIKE ?
+        OR area LIKE ? OR occupation LIKE ? OR health_status LIKE ?
+        OR family_details LIKE ? OR house_no LIKE ?
+        OR community LIKE ? OR religion LIKE ?
+        OR immovable_property LIKE ? OR movable_property LIKE ?
+        OR CAST(salary AS CHAR) LIKE ? OR CAST(income AS CHAR) LIKE ?
+        OR CAST(expenditure AS CHAR) LIKE ?
+      )`);
+      params.push(...Array(14).fill(like));
     }
+    if (f.area)      { parts.push('area = ?');      params.push(f.area); }
+    if (f.village)   { parts.push('village = ?');   params.push(f.village); }
+    if (f.formation) { parts.push('formation = ?'); params.push(f.formation); }
+    if (f.unit)      { parts.push('unit = ?');      params.push(f.unit); }
+
+    const where = parts.length ? `WHERE ${parts.join(' AND ')}` : '';
+    const [records] = await pool.query(
+      `SELECT * FROM civilians ${where} ORDER BY created_at DESC`,
+      params
+    );
     res.json({ success: true, records: withEditFlags(records, req.session.userId), mode });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'Search error' });

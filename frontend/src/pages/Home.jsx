@@ -14,6 +14,9 @@ import {
 import { Bar } from 'react-chartjs-2';
 import { useAuth } from '../context/AuthContext';
 import API from '../api';
+import DashFilters from '../components/DashFilters';
+import { useDashFilters } from '../hooks/useDashFilters';
+import { buildQuery } from '../utils/dashFilters';
 
 /** Default map viewport — northern India / Jammu & Kashmir (pan & zoom unrestricted) */
 const MAP_DEFAULT_CENTER = [33.0, 75.5];
@@ -32,107 +35,22 @@ const tooltipDefaults = {
   cornerRadius: 6,
 };
 
-function buildQuery(filters) {
-  const params = new URLSearchParams();
-  if (filters.area)      params.set('area', filters.area);
-  if (filters.village)   params.set('village', filters.village);
-  if (filters.formation) params.set('formation', filters.formation);
-  if (filters.unit)      params.set('unit', filters.unit);
-  const qs = params.toString();
-  return qs ? `?${qs}` : '';
-}
-
-function DashFilters({ filters, onChange, onClear, hasActive, compact, formations, units, areas, villages }) {
-  return (
-    <div className={`dash-filters${compact ? ' dash-filters--compact' : ''}`}>
-      <div className="dash-filters-fields">
-        <label className="dash-filter-field">
-          <span className="dash-filter-label"><i className="fas fa-sitemap"></i> Formation</span>
-          <select
-            value={filters.formation}
-            onChange={e => onChange({ ...filters, formation: e.target.value })}
-          >
-            <option value="">All Formations</option>
-            {formations.map(f => <option key={f} value={f}>{f}</option>)}
-          </select>
-        </label>
-        <label className="dash-filter-field">
-          <span className="dash-filter-label"><i className="fas fa-people-group"></i> Unit</span>
-          <select
-            value={filters.unit}
-            onChange={e => onChange({ ...filters, unit: e.target.value })}
-          >
-            <option value="">All Units</option>
-            {units.map(u => <option key={u} value={u}>{u}</option>)}
-          </select>
-        </label>
-        <label className="dash-filter-field">
-          <span className="dash-filter-label"><i className="fas fa-shield-halved"></i> Area / Zone</span>
-          <select
-            value={filters.area}
-            onChange={e => onChange({ ...filters, area: e.target.value })}
-          >
-            <option value="">All Areas</option>
-            {areas.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </label>
-        <label className="dash-filter-field">
-          <span className="dash-filter-label"><i className="fas fa-location-dot"></i> Village</span>
-          <select
-            value={filters.village}
-            onChange={e => onChange({ ...filters, village: e.target.value })}
-          >
-            <option value="">All Villages</option>
-            {villages.map(v => <option key={v} value={v}>{v}</option>)}
-          </select>
-        </label>
-      </div>
-      {hasActive && (
-        <div className="dash-filters-active">
-          {filters.formation && (
-            <span className="dash-filter-chip">
-              <i className="fas fa-sitemap"></i> {filters.formation}
-              <button type="button" aria-label="Remove formation filter" onClick={() => onChange({ ...filters, formation: '' })}>×</button>
-            </span>
-          )}
-          {filters.unit && (
-            <span className="dash-filter-chip">
-              <i className="fas fa-people-group"></i> {filters.unit}
-              <button type="button" aria-label="Remove unit filter" onClick={() => onChange({ ...filters, unit: '' })}>×</button>
-            </span>
-          )}
-          {filters.area && (
-            <span className="dash-filter-chip">
-              <i className="fas fa-shield-halved"></i> {filters.area}
-              <button type="button" aria-label="Remove company filter" onClick={() => onChange({ ...filters, area: '' })}>×</button>
-            </span>
-          )}
-          {filters.village && (
-            <span className="dash-filter-chip">
-              <i className="fas fa-location-dot"></i> {filters.village}
-              <button type="button" aria-label="Remove village filter" onClick={() => onChange({ ...filters, village: '' })}>×</button>
-            </span>
-          )}
-          <button type="button" className="dash-filter-clear" onClick={onClear}>
-            <i className="fas fa-xmark"></i> Clear all
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function Home() {
   const { user } = useAuth();
   const [stats, setStats]         = useState(null);
   const [mapPins, setMapPins]     = useState([]);
   const [loading, setLoading]     = useState(true);
-  const [filters, setFilters]     = useState({ area: '', village: '', formation: '', unit: '' });
-  const [pairs, setPairs]           = useState([]);
-  const [formations, setFormations] = useState([]);
-  const [units, setUnits]           = useState([]);
-  const [areas, setAreas]           = useState([]);
-  const [villages, setVillages]     = useState([]);
+  const {
+    filters,
+    formations,
+    units,
+    areas,
+    villages,
+    hasActiveFilters,
+    handleFilterChange,
+    clearFilters,
+    filterBadge,
+  } = useDashFilters();
   const [mapStyle, setMapStyle]     = useState(DEFAULT_MAP_STYLE);
   const [stickyVisible, setStickyVisible] = useState(false);
 
@@ -146,27 +64,6 @@ export default function Home() {
   const hour     = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const dateStr  = new Date().toLocaleDateString('en-GB', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
-
-  const hasActiveFilters = Boolean(filters.area || filters.village || filters.formation || filters.unit);
-
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (filters.formation) params.set('formation', filters.formation);
-    if (filters.unit) params.set('unit', filters.unit);
-    const qs = params.toString();
-
-    API.get(`/api/filter-options${qs ? `?${qs}` : ''}`).then(data => {
-      if (data.success) {
-        setPairs(data.pairs || []);
-        setFormations(data.formations || []);
-        setUnits(data.units || []);
-        if (!filters.formation && !filters.unit) {
-          setAreas(data.areas || []);
-          setVillages(data.villages || []);
-        }
-      }
-    });
-  }, [filters.formation, filters.unit]);
 
   const fetchDashboard = useCallback(async (activeFilters) => {
     setLoading(true);
@@ -214,19 +111,6 @@ export default function Home() {
       window.removeEventListener('resize', onResize);
     };
   }, []);
-
-  const handleFilterChange = next => {
-    if (next.formation !== filters.formation && next.unit) {
-      const valid = pairs.some(p => p.formation === next.formation && p.unit === next.unit);
-      if (!valid) next = { ...next, unit: '' };
-    }
-    if (next.unit !== filters.unit && next.formation) {
-      const valid = pairs.some(p => p.formation === next.formation && p.unit === next.unit);
-      if (!valid) next = { ...next, formation: '' };
-    }
-    setFilters(next);
-  };
-  const clearFilters = () => setFilters({ area: '', village: '', formation: '', unit: '' });
 
   const total = stats?.kpi?.total ?? 0;
   const today = stats?.kpi?.today ?? 0;
@@ -287,10 +171,6 @@ export default function Home() {
       },
     },
   };
-
-  const filterBadge = hasActiveFilters
-    ? [filters.formation, filters.unit, filters.area, filters.village].filter(Boolean).join(' · ')
-    : 'All records';
 
   return (
     <>
@@ -475,7 +355,7 @@ export default function Home() {
             center={MAP_DEFAULT_CENTER}
             zoom={MAP_DEFAULT_ZOOM}
             maxZoom={MAP_MAX_ZOOM}
-            style={{ height: '380px', width: '100%', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)' }}
+            style={{ height: '380px', width: '100%', borderRadius: 'var(--radius)' }}
             scrollWheelZoom={true}
           >
             <MapResize onResize={refreshDashboardMap} />
