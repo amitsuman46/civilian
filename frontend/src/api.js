@@ -1,5 +1,6 @@
 let onUnauthorized = null;
 let unauthorizedHandled = false;
+let csrfToken = null;
 
 export function setUnauthorizedHandler(handler) {
   onUnauthorized = handler;
@@ -9,8 +10,23 @@ export function resetUnauthorizedGuard() {
   unauthorizedHandled = false;
 }
 
+export function setCsrfToken(token) {
+  csrfToken = token || null;
+}
+
+export function clearCsrfToken() {
+  csrfToken = null;
+}
+
 async function request(url, options = {}) {
-  const res = await fetch(url, { credentials: 'include', ...options });
+  const method = (options.method || 'GET').toUpperCase();
+  const isLogin = url.includes('/api/login');
+  const headers = { ...(options.headers || {}) };
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && !isLogin && csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
+
+  const res = await fetch(url, { credentials: 'include', ...options, headers });
   let data;
   try {
     data = await res.json();
@@ -20,6 +36,7 @@ async function request(url, options = {}) {
 
   if (res.status === 401 && onUnauthorized && !unauthorizedHandled) {
     unauthorizedHandled = true;
+    clearCsrfToken();
     onUnauthorized(data.message || 'Unauthorized');
   }
 

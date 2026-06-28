@@ -5,7 +5,23 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const RSSParser = require('rss-parser');
+const { lookupMatchClause, isEncryptionEnabled, decryptField } = require('./lib/crypto');
+const {
+  encryptCivilianFields,
+  decryptCivilian,
+  decryptCivilians,
+  encryptDirectoryFields,
+  decryptDirectory,
+  decryptDirectories,
+  parseFamily,
+  recordMatchesQuery,
+  uniqueSorted,
+  aggregateCounts,
+} = require('./lib/records');
+const { ensureCsrfToken, requireCsrf } = require('./lib/csrf');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -26,6 +42,33 @@ function resolveDistDir() {
 const DIST_DIR = resolveDistDir();
 
 if (isProd) app.set('trust proxy', 1);
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com', 'data:'],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https:', 'http:'],
+      connectSrc: [
+        "'self'",
+        'https://api.maptiler.com',
+        'https://*.maptiler.com',
+        'https://api.open-meteo.com',
+        'https://geocoding-api.open-meteo.com',
+        'https://nominatim.openstreetmap.org',
+        'https://photon.komoot.io',
+      ],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 
 // ── Database pool ──────────────────────────────────────────────
 // Use 127.0.0.1 in production — "localhost" often resolves to ::1 and MySQL rejects it
@@ -91,6 +134,15 @@ app.use(session({
     sameSite: 'lax',
   },
 }));
+app.use(requireCsrf);
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many login attempts. Please try again in 15 minutes.' },
+});
 // ── Multer ─────────────────────────────────────────────────────
 const ALLOWED_IMAGE  = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const ALLOWED_DOC    = ['image/jpeg', 'image/png', 'application/pdf'];
@@ -155,21 +207,24 @@ function resolveUploadPath(filename) {
   return resolved;
 }
 
-function parseFamily(raw) {
-  if (!raw || raw === '[]') return '[]';
-  try { return JSON.stringify(JSON.parse(raw)); } catch { return '[]'; }
-}
-
 function canEditRecord(record, userId) {
   return Boolean(record?.created_by && userId && record.created_by === userId);
 }
 
 function withEditFlag(record, userId) {
-  return { ...record, can_edit: canEditRecord(record, userId) };
+  return { ...decryptCivilian(record), can_edit: canEditRecord(record, userId) };
 }
 
 function withEditFlags(records, userId) {
   return records.map(r => withEditFlag(r, userId));
+}
+
+function withDirEditFlag(record, userId) {
+  return { ...decryptDirectory(record), can_edit: canEditRecord(record, userId) };
+}
+
+function withDirEditFlags(records, userId) {
+  return records.map(r => withDirEditFlag(r, userId));
 }
 
 function denyUnlessOwner(record, userId, res) {
@@ -192,8 +247,14 @@ function parseDashFilters(query) {
     ? query.unit.trim() : null;
   const parts   = [];
   const params  = [];
-  if (area)      { parts.push('area = ?');      params.push(area); }
-  if (village)   { parts.push('village = ?');   params.push(village); }
+  if (area) {
+    const m = lookupMatchClause('area', area);
+    parts.push(m.sql); params.push(...m.params);
+  }
+  if (village) {
+    const m = lookupMatchClause('village', village);
+    parts.push(m.sql); params.push(...m.params);
+  }
   if (formation) { parts.push('formation = ?'); params.push(formation); }
   if (unit)      { parts.push('unit = ?');      params.push(unit); }
   const sql = parts.join(' AND ');
@@ -205,8 +266,12 @@ function parseDashFilters(query) {
   };
 }
 
-// ── Health check (deployment / DB diagnostics) ───────────────
-app.get('/api/health', async (_req, res) => {
+// ── Health (minimal public ping; full diagnostics require auth) ─
+app.get('/api/ping', (_req, res) => {
+  res.json({ ok: true });
+});
+
+app.get('/api/health', requireAuth, async (_req, res) => {
   try {
     await pool.query('SELECT 1');
     res.json({
@@ -224,7 +289,7 @@ app.get('/api/health', async (_req, res) => {
 // AUTH ROUTES
 // ══════════════════════════════════════════════════════════════
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', loginLimiter, async (req, res) => {
   const { user_id, password } = req.body;
   if (!user_id || !password)
     return res.json({ success: false, message: 'Please enter both User ID and Password.' });
@@ -240,8 +305,10 @@ app.post('/api/login', async (req, res) => {
     req.session.userName    = row.full_name;
     req.session.formation   = row.formation || null;
     req.session.unit        = row.unit || row.user_id;
+    const csrfToken = ensureCsrfToken(req);
     res.json({
       success: true,
+      csrfToken,
       user: {
         user_id: row.user_id,
         user_name: row.full_name,
@@ -263,6 +330,7 @@ app.get('/api/me', (req, res) => {
   if (!req.session.userId) return res.json({ success: false });
   res.json({
     success: true,
+    csrfToken: ensureCsrfToken(req),
     user: {
       user_id: req.session.userId,
       user_name: req.session.userName,
@@ -270,6 +338,10 @@ app.get('/api/me', (req, res) => {
       unit: req.session.unit || req.session.userId,
     },
   });
+});
+
+app.get('/api/csrf-token', requireAuth, (req, res) => {
+  res.json({ success: true, csrfToken: ensureCsrfToken(req) });
 });
 
 // Authenticated file serving (replaces public /uploads static route)
@@ -324,20 +396,18 @@ app.get('/api/filter-options', requireAuth, async (req, res) => {
     const [areaRows] = await pool.query(`
       SELECT DISTINCT area AS val FROM civilians
       WHERE area IS NOT NULL AND area != ''
-      ORDER BY val
     `);
     const [villageRows] = await pool.query(`
       SELECT DISTINCT village AS val FROM civilians
       WHERE village IS NOT NULL AND village != ''
-      ORDER BY val
     `);
     res.json({
       success: true,
       formations,
       units,
       pairs,
-      areas: areaRows.map(r => r.val),
-      villages: villageRows.map(r => r.val),
+      areas: uniqueSorted(areaRows.map(r => decryptField(r.val))),
+      villages: uniqueSorted(villageRows.map(r => decryptField(r.val))),
     });
   } catch (e) {
     console.error(e);
@@ -394,25 +464,14 @@ app.get('/api/stats', requireAuth, async (req, res) => {
       monthly.push({ label, count: monthMap[key] || 0 });
     }
 
-    // Area-wise
-    const [rawArea] = await pool.query(`
-      SELECT area, COUNT(*) AS cnt FROM civilians
-      WHERE area IS NOT NULL AND area != ''
-      ${f.and}
-      GROUP BY area
-      ORDER BY cnt DESC, area ASC
+    // Area-wise & village-wise (decrypt labels for mixed plain/encrypted rows)
+    const [geoRows] = await pool.query(`
+      SELECT area, village, created_at FROM civilians
+      WHERE 1=1 ${f.and}
     `, f.params);
-    const area = rawArea.map(r => ({ label: r.area, count: Number(r.cnt) }));
-
-    // Village-wise
-    const [rawVillage] = await pool.query(`
-      SELECT village, COUNT(*) AS cnt FROM civilians
-      WHERE village IS NOT NULL AND village != ''
-      ${f.and}
-      GROUP BY village
-      ORDER BY cnt DESC, village ASC
-    `, f.params);
-    const village = rawVillage.map(r => ({ label: r.village, count: Number(r.cnt) }));
+    const decryptedGeo = decryptCivilians(geoRows);
+    const area = aggregateCounts(decryptedGeo, 'area');
+    const village = aggregateCounts(decryptedGeo, 'village');
 
     res.json({
       success: true,
@@ -453,7 +512,11 @@ app.get('/api/civilians/map-pins', requireAuth, async (req, res) => {
        WHERE lat IS NOT NULL AND lng IS NOT NULL ${f.and}`,
       f.params
     );
-    res.json({ success: true, pins, filters: { area: f.area, village: f.village, formation: f.formation, unit: f.unit } });
+    res.json({
+      success: true,
+      pins: decryptCivilians(pins),
+      filters: { area: f.area, village: f.village, formation: f.formation, unit: f.unit },
+    });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'DB error' });
   }
@@ -504,6 +567,14 @@ app.post('/api/civilians', requireAuth,
       const unit        = req.session.unit || req.session.userId || null;
       const created_by  = req.session.userId || null;
 
+      const enc = encryptCivilianFields({
+        house_no: house_no || null,
+        mobile,
+        area: b.area || null,
+        village: b.village || null,
+        family_details: parseFamily(b.family_details),
+      });
+
       const [result] = await pool.query(`
         INSERT INTO civilians
           (house_no,name,mobile,community,religion,occupation,
@@ -511,14 +582,14 @@ app.post('/api/civilians', requireAuth,
            health_status,area,village,formation,unit,lat,lng,polygon,family_details,photo_path,document_path,created_by)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
-        house_no || null, name, mobile,
+        enc.house_no, name, enc.mobile,
         b.community || null, b.religion || null, b.occupation || null,
         b.immovable_property || null, b.movable_property || null,
         salary, income, expenditure,
-        b.health_status || null, b.area || null, b.village || null,
+        b.health_status || null, enc.area, enc.village,
         formation, unit,
         lat, lng, polygon,
-        parseFamily(b.family_details), photo_path || null, document_path || null,
+        enc.family_details, photo_path || null, document_path || null,
         created_by,
       ]);
 
@@ -573,6 +644,14 @@ app.put('/api/civilians/:id', requireAuth,
       const lng         = b.lng  ? parseFloat(b.lng)  : null;
       const polygon     = b.polygon || null;
 
+      const enc = encryptCivilianFields({
+        house_no: b.house_no || null,
+        mobile,
+        area: b.area || null,
+        village: b.village || null,
+        family_details: parseFamily(b.family_details),
+      });
+
       await pool.query(`
         UPDATE civilians SET
           house_no=?,name=?,mobile=?,community=?,religion=?,occupation=?,
@@ -580,13 +659,13 @@ app.put('/api/civilians/:id', requireAuth,
           health_status=?,area=?,village=?,lat=?,lng=?,polygon=?,family_details=?,photo_path=?,document_path=?
         WHERE id=?
       `, [
-        b.house_no || null, name, mobile,
+        enc.house_no, name, enc.mobile,
         b.community || null, b.religion || null, b.occupation || null,
         b.immovable_property || null, b.movable_property || null,
         salary, income, expenditure,
-        b.health_status || null, b.area || null, b.village || null,
+        b.health_status || null, enc.area, enc.village,
         lat, lng, polygon,
-        parseFamily(b.family_details), photo_path || null, document_path || null,
+        enc.family_details, photo_path || null, document_path || null,
         id,
       ]);
 
@@ -621,7 +700,8 @@ app.patch('/api/civilians/:id/house-no', requireAuth, async (req, res) => {
     const [rows] = await pool.query('SELECT id, created_by FROM civilians WHERE id = ? LIMIT 1', [id]);
     if (!rows.length) return res.json({ success: false, message: 'Record not found.' });
     if (!denyUnlessOwner(rows[0], req.session.userId, res)) return;
-    await pool.query('UPDATE civilians SET house_no = ? WHERE id = ?', [house_no, id]);
+    const enc = encryptCivilianFields({ house_no });
+    await pool.query('UPDATE civilians SET house_no = ? WHERE id = ?', [enc.house_no, id]);
     res.json({ success: true, message: 'House number updated.' });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'Failed to update.' });
@@ -631,6 +711,25 @@ app.patch('/api/civilians/:id/house-no', requireAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // CIVIL DIRECTORY (separate from civilians registry)
 // ══════════════════════════════════════════════════════════════
+
+async function initEncryptionSchema() {
+  const widen = [
+    ['civilians', 'mobile', 'VARCHAR(512) NOT NULL'],
+    ['civilians', 'house_no', 'VARCHAR(512) DEFAULT NULL'],
+    ['civilians', 'village', 'VARCHAR(512) DEFAULT NULL'],
+    ['civilians', 'area', 'VARCHAR(512) DEFAULT NULL'],
+    ['civil_directory', 'mobile', 'VARCHAR(512) NOT NULL'],
+    ['civil_directory', 'village', 'VARCHAR(512) DEFAULT NULL'],
+    ['civil_directory', 'area', 'VARCHAR(512) DEFAULT NULL'],
+  ];
+  for (const [table, column, type] of widen) {
+    try {
+      await pool.query(`ALTER TABLE ${table} MODIFY COLUMN ${column} ${type}`);
+    } catch (e) {
+      console.warn(`Column widen skipped (${table}.${column}):`, e.message);
+    }
+  }
+}
 
 async function initCiviliansSchema() {
   const [cols] = await pool.query(
@@ -695,19 +794,10 @@ function validateDirectoryBody(body) {
 app.get('/api/directory', requireAuth, async (req, res) => {
   try {
     const q = (req.query.q || '').trim();
-    let records;
-    if (!q) {
-      [records] = await pool.query('SELECT * FROM civil_directory ORDER BY name ASC');
-    } else {
-      const like = `%${q}%`;
-      [records] = await pool.query(`
-        SELECT * FROM civil_directory
-        WHERE name LIKE ? OR mobile LIKE ? OR designation LIKE ?
-           OR village LIKE ? OR area LIKE ?
-        ORDER BY name ASC
-      `, Array(5).fill(like));
-    }
-    res.json({ success: true, records: withEditFlags(records, req.session.userId) });
+    const [rows] = await pool.query('SELECT * FROM civil_directory ORDER BY name ASC');
+    let records = decryptDirectories(rows);
+    if (q) records = records.filter(r => recordMatchesQuery(r, q));
+    res.json({ success: true, records: withDirEditFlags(records, req.session.userId) });
   } catch (e) {
     console.error(e);
     res.json({ success: false, message: 'Directory load error' });
@@ -718,7 +808,7 @@ app.get('/api/directory/:id', requireAuth, async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM civil_directory WHERE id = ? LIMIT 1', [req.params.id]);
     if (!rows.length) return res.json({ success: false, message: 'Entry not found.' });
-    res.json({ success: true, record: withEditFlag(rows[0], req.session.userId) });
+    res.json({ success: true, record: withDirEditFlag(rows[0], req.session.userId) });
   } catch (e) {
     console.error(e);
     res.json({ success: false, message: 'Directory load error' });
@@ -730,10 +820,15 @@ app.post('/api/directory', requireAuth, async (req, res) => {
     const v = validateDirectoryBody(req.body);
     if (v.error) return res.json({ success: false, message: v.error });
     const created_by = req.session.userId || null;
+    const enc = encryptDirectoryFields({
+      mobile: v.mobile,
+      village: v.village,
+      area: v.area,
+    });
     const [result] = await pool.query(`
       INSERT INTO civil_directory (name, mobile, designation, village, area, created_by)
       VALUES (?, ?, ?, ?, ?, ?)
-    `, [v.name, v.mobile, v.designation, v.village, v.area, created_by]);
+    `, [v.name, enc.mobile, v.designation, enc.village, enc.area, created_by]);
     res.json({ success: true, message: 'Directory entry added.', id: result.insertId });
   } catch (e) {
     console.error(e);
@@ -749,10 +844,15 @@ app.put('/api/directory/:id', requireAuth, async (req, res) => {
     if (!denyUnlessOwner(existing[0], req.session.userId, res)) return;
     const v = validateDirectoryBody(req.body);
     if (v.error) return res.json({ success: false, message: v.error });
+    const enc = encryptDirectoryFields({
+      mobile: v.mobile,
+      village: v.village,
+      area: v.area,
+    });
     await pool.query(`
       UPDATE civil_directory SET name=?, mobile=?, designation=?, village=?, area=?
       WHERE id=?
-    `, [v.name, v.mobile, v.designation, v.village, v.area, id]);
+    `, [v.name, enc.mobile, v.designation, enc.village, enc.area, id]);
     res.json({ success: true, message: 'Directory entry updated.' });
   } catch (e) {
     console.error(e);
@@ -783,33 +883,15 @@ app.get('/api/search', requireAuth, async (req, res) => {
     const q    = (req.query.q || '').trim();
     const mode = req.query.mode || 'update';
     const f    = parseDashFilters(req.query);
-    const parts  = [];
-    const params = [];
 
-    if (q) {
-      const like = `%${q}%`;
-      parts.push(`(
-        name LIKE ? OR mobile LIKE ? OR village LIKE ?
-        OR area LIKE ? OR occupation LIKE ? OR health_status LIKE ?
-        OR family_details LIKE ? OR house_no LIKE ?
-        OR community LIKE ? OR religion LIKE ?
-        OR immovable_property LIKE ? OR movable_property LIKE ?
-        OR CAST(salary AS CHAR) LIKE ? OR CAST(income AS CHAR) LIKE ?
-        OR CAST(expenditure AS CHAR) LIKE ?
-      )`);
-      params.push(...Array(14).fill(like));
-    }
-    if (f.area)      { parts.push('area = ?');      params.push(f.area); }
-    if (f.village)   { parts.push('village = ?');   params.push(f.village); }
-    if (f.formation) { parts.push('formation = ?'); params.push(f.formation); }
-    if (f.unit)      { parts.push('unit = ?');      params.push(f.unit); }
-
-    const where = parts.length ? `WHERE ${parts.join(' AND ')}` : '';
     const [records] = await pool.query(
-      `SELECT * FROM civilians ${where} ORDER BY created_at DESC`,
-      params
+      `SELECT * FROM civilians ${f.where} ORDER BY created_at DESC`,
+      f.params
     );
-    res.json({ success: true, records: withEditFlags(records, req.session.userId), mode });
+    let decrypted = decryptCivilians(records);
+    if (q) decrypted = decrypted.filter(r => recordMatchesQuery(r, q));
+
+    res.json({ success: true, records: withEditFlags(decrypted, req.session.userId), mode });
   } catch (e) {
     console.error(e); res.json({ success: false, message: 'Search error' });
   }
@@ -908,9 +990,15 @@ async function startServer() {
   console.log(`DB configured: host=${dbHost}, user=${process.env.DB_USER ? 'yes' : 'MISSING'}, name=${process.env.DB_NAME ? 'yes' : 'MISSING'}`);
 
   try {
+    await initEncryptionSchema();
     await initCiviliansSchema();
     await initDirectoryTable();
     console.log('Database connected, schema ready');
+    if (isProd && !isEncryptionEnabled()) {
+      console.warn('WARNING: ENCRYPTION_KEY is not set — sensitive fields stored as plain text.');
+    } else if (isEncryptionEnabled()) {
+      console.log('Field encryption enabled (legacy plain-text rows remain readable).');
+    }
   } catch (err) {
     console.error('Database init failed (server will still start):', err.message);
   }

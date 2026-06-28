@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import API from '../api';
+import API, { setCsrfToken } from '../api';
 
 export default function Login() {
   const { login }    = useAuth();
@@ -23,6 +23,7 @@ export default function Login() {
     try {
       const data = await API.post('/api/login', form);
       if (data.success) {
+        setCsrfToken(data.csrfToken);
         login(data.user);
         navigate('/dashboard');
       } else {

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import API, { setUnauthorizedHandler, resetUnauthorizedGuard } from '../api';
+import API, { setUnauthorizedHandler, resetUnauthorizedGuard, setCsrfToken, clearCsrfToken } from '../api';
 import { useToast } from './ToastContext';
 
 const AuthContext = createContext(null);
@@ -22,7 +22,10 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     API.get('/api/me').then(data => {
-      if (data.success) setUser(data.user);
+      if (data.success) {
+        setUser(data.user);
+        setCsrfToken(data.csrfToken);
+      }
     }).finally(() => setLoading(false));
   }, []);
 
@@ -33,6 +36,7 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     await API.post('/api/logout', {});
+    clearCsrfToken();
     setUser(null);
     resetUnauthorizedGuard();
   };
