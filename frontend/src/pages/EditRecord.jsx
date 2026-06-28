@@ -5,6 +5,7 @@ import WebcamCapture from '../components/WebcamCapture';
 import MapPicker     from '../components/MapPicker';
 import { useToast }  from '../context/ToastContext';
 import API from '../api';
+import { uploadUrl } from '../utils/files';
 
 const OCCUPATIONS    = ['Farmer','Teacher','Engineer','Doctor','Businessman','Driver','Tailor','Nurse','Homemaker','Labourer','Government Employee','Self-Employed','Student','Retired','Other'];
 const AREAS          = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
@@ -122,8 +123,8 @@ export default function EditRecord() {
   if (notFound) return <div className="alert alert-danger"><i className="fas fa-triangle-exclamation"></i> Record not found.</div>;
   if (!rec) return <div style={{padding:'3rem', textAlign:'center'}}><div className="loading-spinner" style={{margin:'0 auto'}}></div></div>;
 
-  const photoUrl = rec.photo_path ? `/uploads/${rec.photo_path}` : null;
-  const docUrl   = rec.document_path ? `/uploads/${rec.document_path}` : null;
+  const photoUrl = uploadUrl(rec.photo_path);
+  const docUrl   = uploadUrl(rec.document_path);
   const docExt   = rec.document_path ? rec.document_path.split('.').pop().toLowerCase() : '';
 
   return (

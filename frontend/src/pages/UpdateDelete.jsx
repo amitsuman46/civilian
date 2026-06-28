@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useToast }   from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import API from '../api';
+import { uploadUrl } from '../utils/files';
 
 function fmtDate(str) {
   if (!str) return '—';
@@ -78,7 +79,7 @@ export default function UpdateDelete() {
       ) : (
         <div className="civilian-grid" id="civilianGrid">
           {records.map(r => {
-            const photo = r.photo_path ? `/uploads/${encodeURIComponent(r.photo_path)}` : null;
+            const photo = uploadUrl(r.photo_path);
             return (
               <div className="civilian-card" key={r.id}>
                 <div className="cc-top">

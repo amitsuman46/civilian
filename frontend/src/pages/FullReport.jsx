@@ -6,6 +6,7 @@ import MapTilerBasemap from '../components/MapTilerBasemap';
 import MapStyleToggle from '../components/MapStyleToggle';
 import { MAP_MAX_ZOOM, MAP_PIN_ZOOM, DEFAULT_MAP_STYLE } from '../config/maptiler';
 import API from '../api';
+import { uploadUrl } from '../utils/files';
 
 function AutoFit({ pin, polygon }) {
   const map = useMap();
@@ -51,8 +52,8 @@ export default function FullReport() {
   if (notFound) return <div className="alert alert-danger"><i className="fas fa-triangle-exclamation"></i> Record not found.</div>;
   if (!rec) return <div style={{padding:'3rem', textAlign:'center'}}><div className="loading-spinner" style={{margin:'0 auto'}}></div></div>;
 
-  const photoUrl = rec.photo_path ? `/uploads/${rec.photo_path}` : null;
-  const docUrl   = rec.document_path ? `/uploads/${rec.document_path}` : null;
+  const photoUrl = uploadUrl(rec.photo_path);
+  const docUrl   = uploadUrl(rec.document_path);
   const docExt   = rec.document_path ? rec.document_path.split('.').pop().toLowerCase() : '';
 
   let familyMembers = [];

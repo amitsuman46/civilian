@@ -91,8 +91,6 @@ app.use(session({
     sameSite: 'lax',
   },
 }));
-app.use('/uploads', express.static(UPLOADS_DIR));
-
 // ── Multer ─────────────────────────────────────────────────────
 const ALLOWED_IMAGE  = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const ALLOWED_DOC    = ['image/jpeg', 'image/png', 'application/pdf'];
@@ -133,8 +131,28 @@ function saveBase64(str, prefix) {
 
 function deleteFile(filename) {
   if (!filename) return;
-  const fp = path.join(UPLOADS_DIR, filename);
-  try { if (fs.existsSync(fp)) fs.unlinkSync(fp); } catch {}
+  const fp = resolveUploadPath(filename);
+  try { if (fp && fs.existsSync(fp)) fs.unlinkSync(fp); } catch {}
+}
+
+const SAFE_FILENAME = /^[a-zA-Z0-9_.-]+$/;
+
+const MIME_BY_EXT = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  pdf: 'application/pdf',
+};
+
+function resolveUploadPath(filename) {
+  if (!filename || !SAFE_FILENAME.test(filename)) return null;
+  const base = path.resolve(UPLOADS_DIR);
+  const resolved = path.resolve(base, filename);
+  if (resolved !== base && !resolved.startsWith(`${base}${path.sep}`)) return null;
+  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) return null;
+  return resolved;
 }
 
 function parseFamily(raw) {
@@ -252,6 +270,18 @@ app.get('/api/me', (req, res) => {
       unit: req.session.unit || req.session.userId,
     },
   });
+});
+
+// Authenticated file serving (replaces public /uploads static route)
+app.get('/api/files/:filename', requireAuth, (req, res) => {
+  const fp = resolveUploadPath(req.params.filename);
+  if (!fp) return res.status(404).json({ success: false, message: 'File not found.' });
+  const ext = path.extname(fp).slice(1).toLowerCase();
+  const mime = MIME_BY_EXT[ext] || 'application/octet-stream';
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.sendFile(fp);
 });
 
 // ══════════════════════════════════════════════════════════════
@@ -864,7 +894,7 @@ app.get('/api/news/feeds', requireAuth, (req, res) => {
 if (DIST_DIR) {
   app.use(express.static(DIST_DIR));
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) return next();
+    if (req.path.startsWith('/api/')) return next();
     res.sendFile(path.join(DIST_DIR, 'index.html'));
   });
 } else if (isProd) {

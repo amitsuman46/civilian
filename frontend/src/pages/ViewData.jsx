@@ -6,6 +6,7 @@ import { useDashFilters } from '../hooks/useDashFilters';
 import { appendFilterParams } from '../utils/dashFilters';
 import { exportViewDataExcel, exportViewDataPdf } from '../utils/exportViewData';
 import { useToast } from '../context/ToastContext';
+import { uploadUrl } from '../utils/files';
 
 function fmtDate(str) {
   if (!str) return '—';
@@ -13,7 +14,7 @@ function fmtDate(str) {
 }
 
 function CivilianCard({ r }) {
-  const photo = r.photo_path ? `/uploads/${encodeURIComponent(r.photo_path)}` : null;
+  const photo = uploadUrl(r.photo_path);
   return (
     <div className="civilian-card">
       <div className="cc-top">
