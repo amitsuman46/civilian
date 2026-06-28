@@ -1,19 +1,27 @@
 const EXPORT_COLUMNS = [
-  { key: 'house_no',        label: 'House No' },
-  { key: 'name',            label: 'Name' },
-  { key: 'mobile',          label: 'Mobile' },
-  { key: 'village',         label: 'Village' },
-  { key: 'area',            label: 'Area' },
-  { key: 'formation',       label: 'Formation' },
-  { key: 'unit',            label: 'Unit' },
-  { key: 'occupation',      label: 'Occupation' },
-  { key: 'community',       label: 'Community' },
-  { key: 'religion',        label: 'Religion' },
-  { key: 'salary',          label: 'Salary' },
-  { key: 'income',          label: 'Income' },
-  { key: 'expenditure',     label: 'Expenditure' },
-  { key: 'health_status',   label: 'Health Status' },
-  { key: 'created_at',      label: 'Created' },
+  { key: 'id',                  label: 'Record ID' },
+  { key: 'house_no',            label: 'House No' },
+  { key: 'name',                label: 'Name' },
+  { key: 'mobile',              label: 'Mobile' },
+  { key: 'village',             label: 'Village' },
+  { key: 'area',                label: 'Area' },
+  { key: 'formation',           label: 'Formation' },
+  { key: 'unit',                label: 'Unit' },
+  { key: 'occupation',          label: 'Occupation' },
+  { key: 'community',           label: 'Community' },
+  { key: 'religion',            label: 'Religion' },
+  { key: 'immovable_property',  label: 'Immovable Property' },
+  { key: 'movable_property',    label: 'Movable Property' },
+  { key: 'salary',              label: 'Salary', type: 'money' },
+  { key: 'income',              label: 'Income', type: 'money' },
+  { key: 'expenditure',         label: 'Expenditure', type: 'money' },
+  { key: 'lat',                 label: 'Latitude', type: 'coord' },
+  { key: 'lng',                 label: 'Longitude', type: 'coord' },
+  { key: 'plot_boundary',       label: 'Plot Boundary', type: 'polygon' },
+  { key: 'family_details',      label: 'Family Details', type: 'family' },
+  { key: 'document_attached',   label: 'Document Attached', type: 'document' },
+  { key: 'created_by',          label: 'Created By' },
+  { key: 'created_at',          label: 'Created', type: 'date' },
 ];
 
 function fmtExportDate(str) {
@@ -26,20 +34,73 @@ function fmtMoney(v) {
   return Number.isFinite(n) && n > 0 ? n : '';
 }
 
+function fmtCoord(v) {
+  if (v == null || v === '') return '';
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n.toFixed(6) : '';
+}
+
+function fmtFamily(raw) {
+  let members = [];
+  try {
+    members = Array.isArray(raw) ? raw : JSON.parse(raw || '[]');
+  } catch {
+    return '';
+  }
+  if (!members.length) return '';
+  return members.map((m, i) => {
+    const bits = [
+      m.name,
+      m.relation || null,
+      m.age ? `Age ${m.age}` : null,
+      m.occupation || null,
+      m.remarks || null,
+    ].filter(Boolean);
+    return `${i + 1}. ${bits.join(', ')}`;
+  }).join('; ');
+}
+
+function hasPolygon(raw) {
+  if (!raw) return '';
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return parsed ? 'Yes' : '';
+  } catch {
+    return '';
+  }
+}
+
+function fmtDocument(path) {
+  return path ? 'Yes' : '';
+}
+
+function exportValue(record, col) {
+  switch (col.type) {
+    case 'date':
+      return fmtExportDate(record[col.key]);
+    case 'money':
+      return fmtMoney(record[col.key]);
+    case 'coord':
+      return fmtCoord(record[col.key]);
+    case 'family':
+      return fmtFamily(record.family_details);
+    case 'polygon':
+      return hasPolygon(record.polygon);
+    case 'document':
+      return fmtDocument(record.document_path);
+    default:
+      return record[col.key] ?? '';
+  }
+}
+
 function recordToRow(record) {
-  return EXPORT_COLUMNS.map(({ key }) => {
-    if (key === 'created_at') return fmtExportDate(record.created_at);
-    if (key === 'salary' || key === 'income' || key === 'expenditure') return fmtMoney(record[key]);
-    return record[key] ?? '';
-  });
+  return EXPORT_COLUMNS.map(col => exportValue(record, col));
 }
 
 function recordToSheetRow(record) {
   const row = {};
-  for (const { key, label } of EXPORT_COLUMNS) {
-    if (key === 'created_at') row[label] = fmtExportDate(record.created_at);
-    else if (key === 'salary' || key === 'income' || key === 'expenditure') row[label] = fmtMoney(record[key]);
-    else row[label] = record[key] ?? '';
+  for (const col of EXPORT_COLUMNS) {
+    row[col.label] = exportValue(record, col);
   }
   return row;
 }
@@ -63,6 +124,7 @@ export async function exportViewDataExcel(records, { filterLabel = 'All records'
     ['Filters', filterLabel],
     ['Search', searchQuery || '—'],
     ['Total records', records.length],
+    ['Note', 'Photos are not included. Document column indicates attachment only.'],
     [],
   ];
 
@@ -92,16 +154,18 @@ export async function exportViewDataPdf(records, { filterLabel = 'All records', 
   doc.text(`Filters: ${filterLabel}`, 14, 26);
   doc.text(`Search: ${searchQuery || '—'}`, 14, 31);
   doc.text(`Total records: ${records.length}`, 14, 36);
+  doc.text('Photos not included — document column shows attachment only.', 14, 41);
   doc.setTextColor(0);
 
   autoTable(doc, {
     head: [headers],
     body,
-    startY: 42,
-    styles: { fontSize: 7, cellPadding: 1.5 },
-    headStyles: { fillColor: [29, 78, 216], textColor: 255, fontStyle: 'bold' },
+    startY: 46,
+    styles: { fontSize: 5.5, cellPadding: 1, overflow: 'linebreak' },
+    headStyles: { fillColor: [29, 78, 216], textColor: 255, fontStyle: 'bold', fontSize: 5.5 },
     alternateRowStyles: { fillColor: [248, 250, 252] },
-    margin: { left: 14, right: 14 },
+    margin: { left: 8, right: 8 },
+    tableWidth: 'auto',
   });
 
   doc.save(buildFilename('pdf', filterLabel));
