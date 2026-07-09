@@ -10,6 +10,7 @@
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.19.3",
     "@maptiler/leaflet-maptilersdk": "^4.1.1",
+    "@tanstack/react-virtual": "^3.14.5",
     "chart.js": "^4.4.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",

@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, memo } from 'react';
 import { Link } from 'react-router-dom';
 import API from '../api';
 import DashFilters from '../components/DashFilters';
+import VirtualCivilianGrid from '../components/VirtualCivilianGrid';
 import { useDashFilters } from '../hooks/useDashFilters';
 import { appendFilterParams } from '../utils/dashFilters';
 import { exportViewDataExcel, exportViewDataPdf } from '../utils/exportViewData';
@@ -13,13 +14,13 @@ function fmtDate(str) {
   return new Date(str).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
 }
 
-function CivilianCard({ r }) {
+const CivilianCard = memo(function CivilianCard({ r }) {
   const photo = uploadUrl(r.photo_path);
   return (
     <div className="civilian-card">
       <div className="cc-top">
         {photo
-          ? <img src={photo} className="cc-avatar" alt="Photo"
+          ? <img src={photo} className="cc-avatar" alt="Photo" loading="lazy" decoding="async"
               onError={e => { e.target.style.display='none'; e.target.nextElementSibling.style.display='flex'; }} />
           : null
         }
@@ -49,7 +50,7 @@ function CivilianCard({ r }) {
       </div>
     </div>
   );
-}
+});
 
 export default function ViewData() {
   const [records, setRecords] = useState([]);
@@ -195,9 +196,10 @@ export default function ViewData() {
           </p>
         </div>
       ) : (
-        <div className="civilian-grid" id="civilianGrid">
-          {records.map(r => <CivilianCard key={r.id} r={r} />)}
-        </div>
+        <VirtualCivilianGrid
+          records={records}
+          renderCard={r => <CivilianCard key={r.id} r={r} />}
+        />
       )}
     </>
   );

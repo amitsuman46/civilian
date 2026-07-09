@@ -730,6 +730,21 @@ h1,h2,h3,h4,h5,h6 {
   gap: 1.1rem;
 }
 
+.civilian-grid-virtual-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.civilian-grid-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  grid-template-columns: repeat(var(--civilian-cols, 1), minmax(0, 1fr));
+  padding-bottom: 1.1rem;
+  will-change: transform;
+}
+
 .civilian-card {
   background: var(--card-bg);
   border-radius: var(--radius-lg);
