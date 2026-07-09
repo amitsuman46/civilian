@@ -6,6 +6,7 @@ import MapPicker     from '../components/MapPicker';
 import { useToast }  from '../context/ToastContext';
 import API from '../api';
 import { uploadUrl } from '../utils/files';
+import { SUSPICIOUS_OPTIONS } from '../constants/civilianOptions';
 
 const OCCUPATIONS    = ['Farmer','Teacher','Engineer','Doctor','Businessman','Driver','Tailor','Nurse','Homemaker','Labourer','Government Employee','Self-Employed','Student','Retired','Other'];
 const AREAS          = ['Saujiya','Poonch','Rajouri','Mendhar','Krishna Ghati'];
@@ -47,6 +48,7 @@ export default function EditRecord() {
         house_no: r.house_no || '', name: r.name || '', mobile: r.mobile || '',
         village: r.village || '', area: r.area || '', occupation: r.occupation || '',
         community: r.community || '', religion: r.religion || '',
+        suspicious: r.suspicious || 'No',
         immovable_property: r.immovable_property || '', movable_property: r.movable_property || '',
         income: r.income || '', expenditure: r.expenditure || '', salary: r.salary || '',
       });
@@ -198,6 +200,12 @@ export default function EditRecord() {
                   </select>
                 </div>
               ))}
+              <div className="form-group">
+                <label>Suspicious</label>
+                <select value={form.suspicious || 'No'} onChange={e => set('suspicious', e.target.value)}>
+                  {SUSPICIOUS_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
             </div>
           </div>
         </div>

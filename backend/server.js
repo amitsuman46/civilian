@@ -1,3 +1,5 @@
+require('./loadEnv');
+
 const express = require('express');
 const session = require('express-session');
 const mysql = require('mysql2/promise');
@@ -26,6 +28,12 @@ const { ensureCsrfToken, requireCsrf } = require('./lib/csrf');
 const app = express();
 const PORT = process.env.PORT || 3001;
 const isProd = process.env.NODE_ENV === 'production';
+
+function dbErrorMessage(err, fallback) {
+  if (!isProd && err?.sqlMessage) return `${fallback}: ${err.sqlMessage}`;
+  if (!isProd && err?.message) return `${fallback}: ${err.message}`;
+  return fallback;
+}
 
 function resolveDistDir() {
   const candidates = [
@@ -164,6 +172,13 @@ const upload = multer({
     cb(null, ok);
   },
 });
+
+const SUSPICIOUS_VALUES = new Set(['Yes', 'No', 'POK']);
+
+function normalizeSuspicious(value) {
+  const v = (value || 'No').trim();
+  return SUSPICIOUS_VALUES.has(v) ? v : 'No';
+}
 
 // ── Helpers ────────────────────────────────────────────────────
 function requireAuth(req, res, next) {
@@ -566,6 +581,7 @@ app.post('/api/civilians', requireAuth,
       const formation   = req.session.formation || null;
       const unit        = req.session.unit || req.session.userId || null;
       const created_by  = req.session.userId || null;
+      const suspicious  = normalizeSuspicious(b.suspicious);
 
       const enc = encryptCivilianFields({
         house_no: house_no || null,
@@ -577,13 +593,13 @@ app.post('/api/civilians', requireAuth,
 
       const [result] = await pool.query(`
         INSERT INTO civilians
-          (house_no,name,mobile,community,religion,occupation,
+          (house_no,name,mobile,community,religion,occupation,suspicious,
            immovable_property,movable_property,salary,income,expenditure,
            health_status,area,village,formation,unit,lat,lng,polygon,family_details,photo_path,document_path,created_by)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
         enc.house_no, name, enc.mobile,
-        b.community || null, b.religion || null, b.occupation || null,
+        b.community || null, b.religion || null, b.occupation || null, suspicious,
         b.immovable_property || null, b.movable_property || null,
         salary, income, expenditure,
         b.health_status || null, enc.area, enc.village,
@@ -595,7 +611,7 @@ app.post('/api/civilians', requireAuth,
 
       res.json({ success: true, message: 'Record saved successfully!', id: result.insertId });
     } catch (e) {
-      console.error(e); res.json({ success: false, message: 'Failed to save record.' });
+      console.error(e); res.json({ success: false, message: dbErrorMessage(e, 'Failed to save record.') });
     }
   }
 );
@@ -643,6 +659,7 @@ app.put('/api/civilians/:id', requireAuth,
       const lat         = b.lat  ? parseFloat(b.lat)  : null;
       const lng         = b.lng  ? parseFloat(b.lng)  : null;
       const polygon     = b.polygon || null;
+      const suspicious  = normalizeSuspicious(b.suspicious);
 
       const enc = encryptCivilianFields({
         house_no: b.house_no || null,
@@ -654,13 +671,13 @@ app.put('/api/civilians/:id', requireAuth,
 
       await pool.query(`
         UPDATE civilians SET
-          house_no=?,name=?,mobile=?,community=?,religion=?,occupation=?,
+          house_no=?,name=?,mobile=?,community=?,religion=?,occupation=?,suspicious=?,
           immovable_property=?,movable_property=?,salary=?,income=?,expenditure=?,
           health_status=?,area=?,village=?,lat=?,lng=?,polygon=?,family_details=?,photo_path=?,document_path=?
         WHERE id=?
       `, [
         enc.house_no, name, enc.mobile,
-        b.community || null, b.religion || null, b.occupation || null,
+        b.community || null, b.religion || null, b.occupation || null, suspicious,
         b.immovable_property || null, b.movable_property || null,
         salary, income, expenditure,
         b.health_status || null, enc.area, enc.village,
@@ -671,7 +688,7 @@ app.put('/api/civilians/:id', requireAuth,
 
       res.json({ success: true, message: 'Record updated successfully!' });
     } catch (e) {
-      console.error(e); res.json({ success: false, message: 'Failed to update record.' });
+      console.error(e); res.json({ success: false, message: dbErrorMessage(e, 'Failed to update record.') });
     }
   }
 );
@@ -718,6 +735,7 @@ async function initEncryptionSchema() {
     ['civilians', 'house_no', 'VARCHAR(512) DEFAULT NULL'],
     ['civilians', 'village', 'VARCHAR(512) DEFAULT NULL'],
     ['civilians', 'area', 'VARCHAR(512) DEFAULT NULL'],
+    ['civilians', 'family_details', 'LONGTEXT'],
     ['civil_directory', 'mobile', 'VARCHAR(512) NOT NULL'],
     ['civil_directory', 'village', 'VARCHAR(512) DEFAULT NULL'],
     ['civil_directory', 'area', 'VARCHAR(512) DEFAULT NULL'],
@@ -725,8 +743,9 @@ async function initEncryptionSchema() {
   for (const [table, column, type] of widen) {
     try {
       await pool.query(`ALTER TABLE ${table} MODIFY COLUMN ${column} ${type}`);
+      console.log(`Schema OK: ${table}.${column} → ${type}`);
     } catch (e) {
-      console.warn(`Column widen skipped (${table}.${column}):`, e.message);
+      console.error(`Schema widen failed (${table}.${column}):`, e.sqlMessage || e.message);
     }
   }
 }
@@ -745,6 +764,14 @@ async function initCiviliansSchema() {
        WHERE (created_by IS NULL OR created_by = '') AND unit IS NOT NULL AND unit != ''`
     );
     if (r.affectedRows) console.log(`Backfilled created_by on ${r.affectedRows} existing record(s)`);
+  }
+  if (!names.has('suspicious')) {
+    await pool.query(
+      `ALTER TABLE civilians ADD COLUMN suspicious VARCHAR(8) NOT NULL DEFAULT 'No' AFTER occupation`
+    );
+    console.log('Added civilians.suspicious column');
+    const [r] = await pool.query(`UPDATE civilians SET suspicious = 'No' WHERE suspicious IS NULL OR suspicious = ''`);
+    if (r.affectedRows) console.log(`Backfilled suspicious on ${r.affectedRows} existing record(s)`);
   }
 }
 

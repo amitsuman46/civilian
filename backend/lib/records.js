@@ -23,7 +23,10 @@ function decryptCivilian(record) {
   if (!record) return record;
   const out = { ...record };
   for (const f of [...CIVILIAN_LOOKUP_FIELDS, ...CIVILIAN_FIELD_ENCRYPT]) {
-    if (out[f] != null && out[f] !== '') out[f] = decryptField(out[f]);
+    if (out[f] == null || out[f] === '') continue;
+    let val = out[f];
+    if (f === 'family_details' && typeof val === 'object') val = JSON.stringify(val);
+    out[f] = decryptField(val);
   }
   return out;
 }
@@ -63,7 +66,7 @@ function recordMatchesQuery(record, q) {
   const lower = q.toLowerCase();
   const scalarFields = [
     'name', 'mobile', 'village', 'area', 'occupation', 'health_status',
-    'house_no', 'community', 'religion', 'immovable_property', 'movable_property',
+    'house_no', 'community', 'religion', 'suspicious', 'immovable_property', 'movable_property',
     'designation',
   ];
   for (const f of scalarFields) {

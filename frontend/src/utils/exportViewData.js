@@ -10,6 +10,7 @@ const EXPORT_COLUMNS = [
   { key: 'occupation',          label: 'Occupation' },
   { key: 'community',           label: 'Community' },
   { key: 'religion',            label: 'Religion' },
+  { key: 'suspicious',          label: 'Suspicious' },
   { key: 'immovable_property',  label: 'Immovable Property' },
   { key: 'movable_property',    label: 'Movable Property' },
   { key: 'salary',              label: 'Salary', type: 'money' },
@@ -89,6 +90,7 @@ function exportValue(record, col) {
     case 'document':
       return fmtDocument(record.document_path);
     default:
+      if (col.key === 'suspicious') return record.suspicious || 'No';
       return record[col.key] ?? '';
   }
 }

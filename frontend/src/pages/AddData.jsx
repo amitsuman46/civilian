@@ -7,13 +7,15 @@ import { useToast }   from '../context/ToastContext';
 import { useAuth }    from '../context/AuthContext';
 import API from '../api';
 
+import { SUSPICIOUS_OPTIONS } from '../constants/civilianOptions';
+
 const OCCUPATIONS    = ['Farmer','Teacher','Engineer','Doctor','Businessman','Driver','Tailor','Nurse','Homemaker','Labourer','Government Employee','Self-Employed','Student','Retired','Other'];
 const COMMUNITIES    = ['Dogras','Gujjars','Bakarwals','Paharis','Others'];
 const RELIGIONS      = ['Islam','Hinduism','Sikhism','Christianity','Buddhism','Jainism','Other'];
 
 const EMPTY = {
   house_no:'', name:'', mobile:'', village:'', area:'', occupation:'',
-  community:'', religion:'',
+  community:'', religion:'', suspicious:'No',
   immovable_property:'', movable_property:'', income:'', expenditure:'', salary:'',
   formation:'', unit:'',
 };
@@ -234,6 +236,12 @@ export default function AddData() {
                   </select>
                 </div>
               ))}
+              <div className="form-group">
+                <label>Suspicious <span className="req">*</span></label>
+                <select value={form.suspicious} onChange={e => set('suspicious', e.target.value)}>
+                  {SUSPICIOUS_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
             </div>
           </div>
         </div>

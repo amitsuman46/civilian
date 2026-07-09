@@ -6,13 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');
 
-const envPath = path.join(__dirname, '../../.env');
-if (fs.existsSync(envPath)) {
-  for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
-    const m = line.match(/^([A-Z_]+)=(.*)$/);
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
-  }
-}
+require('../loadEnv');
 
 const isProd = process.env.NODE_ENV === 'production';
 const dbHost = process.env.DB_HOST === 'localhost' && isProd
@@ -58,6 +52,29 @@ async function main() {
   await addColumn(conn, 'civilians', 'formation', 'formation VARCHAR(255) DEFAULT NULL AFTER village');
   await addColumn(conn, 'civilians', 'unit', 'unit VARCHAR(255) DEFAULT NULL AFTER formation');
   await addColumn(conn, 'civilians', 'created_by', 'created_by VARCHAR(64) DEFAULT NULL');
+  await addColumn(conn, 'civilians', 'suspicious', "suspicious VARCHAR(8) NOT NULL DEFAULT 'No' AFTER occupation");
+
+  console.log('\nWidening encrypted-field columns (if needed):');
+  const widen = [
+    ['civilians', 'mobile', 'VARCHAR(512) NOT NULL'],
+    ['civilians', 'house_no', 'VARCHAR(512) DEFAULT NULL'],
+    ['civilians', 'village', 'VARCHAR(512) DEFAULT NULL'],
+    ['civilians', 'area', 'VARCHAR(512) DEFAULT NULL'],
+    ['civilians', 'family_details', 'LONGTEXT'],
+  ];
+  for (const [table, column, type] of widen) {
+    try {
+      await conn.query(`ALTER TABLE \`${table}\` MODIFY COLUMN \`${column}\` ${type}`);
+      console.log(`  widened ${table}.${column}`);
+    } catch (e) {
+      console.error(`  widen failed ${table}.${column}:`, e.message);
+    }
+  }
+
+  const [r3] = await conn.query(
+    `UPDATE civilians SET suspicious = 'No' WHERE suspicious IS NULL OR suspicious = ''`
+  );
+  if (r3.affectedRows) console.log(`\nBackfilled suspicious on ${r3.affectedRows} civilian row(s).`);
 
   const [r2] = await conn.query(
     `UPDATE civilians SET created_by = unit

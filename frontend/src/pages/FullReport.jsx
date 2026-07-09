@@ -170,6 +170,7 @@ export default function FullReport() {
                   { icon:'fa-briefcase',   label:'Occupation',     val: rec.occupation },
                   { icon:'fa-users',       label:'Community',      val: rec.community },
                   { icon:'fa-mosque',      label:'Religion',       val: rec.religion },
+                  { icon:'fa-user-shield', label:'Suspicious',     val: rec.suspicious || 'No' },
                 ].map(({ icon, label, val }) => (
                   <div className="detail-item" key={label}>
                     <div className="detail-label"><i className={`fas ${icon}`}></i> {label}</div>

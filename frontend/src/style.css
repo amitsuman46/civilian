@@ -757,6 +757,31 @@ h1,h2,h3,h4,h5,h6 {
 }
 .civilian-card:hover { box-shadow: var(--shadow-md); transform: translateY(-3px); }
 
+.civilian-card--suspicious-no {
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+}
+
+.civilian-card--suspicious-yes {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--card-bg), var(--card-bg)) padding-box,
+    linear-gradient(135deg, #fca5a5, #ef4444, #b91c1c, #991b1b) border-box;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.12), var(--shadow-sm);
+}
+
+.civilian-card--suspicious-pok {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--card-bg), var(--card-bg)) padding-box,
+    linear-gradient(135deg, #86efac, #22c55e, #16a34a, #15803d) border-box;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.12), var(--shadow-sm);
+}
+
+.cc-tag.suspicious-yes { background: #fef2f2; color: #b91c1c; }
+.cc-tag.suspicious-no  { background: #f8fafc; color: #64748b; }
+.cc-tag.suspicious-pok { background: #f0fdf4; color: #15803d; }
+
 .cc-top {
   display: flex;
   align-items: flex-start;

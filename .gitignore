@@ -3,6 +3,8 @@ node_modules/
 backend/uploads/
 civilian-uploads/
 *.env
+.env.local
+!.env.local.example
 .DS_Store
 .claude/
 

@@ -8,6 +8,7 @@ import { appendFilterParams } from '../utils/dashFilters';
 import { exportViewDataExcel, exportViewDataPdf } from '../utils/exportViewData';
 import { useToast } from '../context/ToastContext';
 import { uploadUrl } from '../utils/files';
+import { suspiciousCardClass, suspiciousTagClass, normalizeSuspicious } from '../constants/civilianOptions';
 
 function fmtDate(str) {
   if (!str) return '—';
@@ -16,8 +17,9 @@ function fmtDate(str) {
 
 const CivilianCard = memo(function CivilianCard({ r }) {
   const photo = uploadUrl(r.photo_path);
+  const suspicious = normalizeSuspicious(r.suspicious);
   return (
-    <div className="civilian-card">
+    <div className={`civilian-card ${suspiciousCardClass(suspicious)}`}>
       <div className="cc-top">
         {photo
           ? <img src={photo} className="cc-avatar" alt="Photo" loading="lazy" decoding="async"
@@ -39,6 +41,9 @@ const CivilianCard = memo(function CivilianCard({ r }) {
       </div>
       <hr className="cc-divider" />
       <div className="cc-tags">
+        <span className={suspiciousTagClass(suspicious)}>
+          <i className="fas fa-user-shield"></i>Suspicious: {suspicious}
+        </span>
         {r.occupation   && <span className="cc-tag occupation"><i className="fas fa-briefcase"></i>{r.occupation}</span>}
         {r.salary > 0   && <span className="cc-tag salary"><i className="fas fa-indian-rupee-sign"></i>{parseFloat(r.salary).toLocaleString()}/mo</span>}
         {r.document_path && <span className="cc-tag area"><i className="fas fa-paperclip"></i>Doc attached</span>}

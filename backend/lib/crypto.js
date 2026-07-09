@@ -4,7 +4,9 @@ const ENC_PREFIX = 'enc:v1:';
 const ENC_DET_PREFIX = 'encd:v1:';
 
 function getKey() {
-  const raw = process.env.ENCRYPTION_KEY;
+  let raw = process.env.ENCRYPTION_KEY;
+  if (!raw) return null;
+  raw = raw.trim().replace(/^["']|["']$/g, '');
   if (!raw) return null;
   return crypto.createHash('sha256').update(raw).digest();
 }
